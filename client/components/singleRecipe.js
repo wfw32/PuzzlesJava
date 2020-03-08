@@ -158,4 +158,103 @@ class SingleRecipe extends React.Component {
           </Row>
 
           <Row>
- 
+            <Col className="single-recipe-image-container">
+              <Row style={{justifyContent: 'center'}}>
+                <p>
+                  <strong>Ready In: </strong>
+                  {recipe.time} minutes (approx. time)
+                </p>
+              </Row>
+              <Row style={{justifyContent: 'center'}}>
+                <img src={recipe.image} />
+              </Row>
+
+              <Row style={{padding: 25}} className="centered-btn">
+                <a href={recipe.url} target="_blank" rel="noreferrer">
+                  <Button variant="outline-info">
+                    {'View Full Recipe >>'}
+                  </Button>
+                </a>
+              </Row>
+              <Row style={{padding: 25}} className="centered-btn">
+                <Button variant="outline-info" onClick={() => this.goBack()}>
+                  {'<< Back to Results'}
+                </Button>
+              </Row>
+            </Col>
+
+            <Col className="single-recipe-image-container">
+              <Row style={{justifyContent: 'center'}}>
+                <p>
+                  <strong>Recipe Ingredient List</strong>
+                </p>
+
+                <RecipeList
+                  recipe={recipe.matchingRecipes[recipe.index]}
+                  viewMissing={this.state.viewMissingIngredients}
+                />
+              </Row>
+              <Row className="single-recipe-missing-ingredients-text">
+                <p>Want us to highlight the ingredients you don't have? </p>
+              </Row>
+              <Row className="single-recipe-missing-ingredients-button">
+                <Button variant="outline-info" onClick={this.viewMissing}>
+                  Yes, Show Me
+                </Button>
+              </Row>
+              {this.state.viewMissingIngredients ? (
+                <Row>
+                  <Col style={{paddingTop: 15}}>
+                    <p className="single-recipe-missing-ingredients-text">
+                      Send Missing Ingredients to Your Phone
+                    </p>
+                    <Button
+                      onClick={this.onSubmit}
+                      className="single-recipe-btn"
+                    >
+                      Text Me
+                    </Button>
+                    {this.state.isShowing ? (
+                      <Text
+                        missingIngredients={
+                          recipe.matchingRecipes[recipe.index]
+                            .missingIngredients
+                        }
+                        url={recipe.url}
+                        name={recipe.label}
+                      />
+                    ) : null}
+                  </Col>
+                  <Col style={{paddingTop: 15}}>
+                    <p className="single-recipe-missing-ingredients-text">
+                      Send Missing Ingredients to Your Email
+                    </p>
+                    <Button
+                      className="single-recipe-btn"
+                      onClick={this.emailSubmit}
+                    >
+                      Email Me
+                    </Button>
+                    {this.state.emailShowing ? (
+                      <Email
+                        missingIngredients={
+                          recipe.matchingRecipes[recipe.index]
+                            .missingIngredients
+                        }
+                        image={recipe.image}
+                        url={recipe.url}
+                        name={recipe.label}
+                      />
+                    ) : null}
+                  </Col>
+                </Row>
+              ) : null}
+            </Col>
+          </Row>
+        </Container>
+      </div>
+    )
+  }
+}
+
+export default SingleRecipe
