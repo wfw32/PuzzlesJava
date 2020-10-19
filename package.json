@@ -1,0 +1,75 @@
+{
+  "name": "meal-dot-match",
+  "version": "2.0.0",
+  "description": "Some boilerplate code to get you started - get shakin'!",
+  "engines": {
+    "node": "^12.7.0",
+    "npm": "^7.3.0"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build-client": "webpack",
+    "build-client-watch": "webpack -w",
+    "deploy": "script/deploy",
+    "heroku-token": "script/encrypt-heroku-auth-token",
+    "lint": "eslint ./ --ignore-path .gitignore",
+    "lint-fix": "npm run lint -- --fix",
+    "prepare": "if [ -d .git ]; then npm-merge-driver install; fi",
+    "prettify": "prettier --write \"**/*.{js,jsx,json,css,scss,md}\"",
+    "postinstall": "touch secrets.js",
+    "seed": "node script/seed.js",
+    "start": "node server",
+    "start-dev": "NODE_ENV='development' npm run build-client-watch & NODE_ENV='development' npm run start-server",
+    "start-server": "nodemon server -e html,js,scss --ignore public --ignore client"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": [
+      "prettier --write",
+      "npm run lint-fix",
+      "git add"
+    ],
+    "*.{css,scss,json,md}": [
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "author": "Fullstack Academy of Code",
+  "license": "MIT",
+  "dependencies": {
+    "apollo-boost": "^0.3.1",
+    "apollo-link-error": "^1.1.13",
+    "axios": "^0.18.1",
+    "bootstrap": "^4.5.3",
+    "compression": "^1.7.3",
+    "connect-session-sequelize": "^6.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "express-graphql": "^0.8.0",
+    "express-session": "^1.17.1",
+    "graphql": "^14.7.0",
+    "graphql-playground-html": "^1.6.29",
+    "graphql-yoga": "^1.18.3",
+    "history": "^4.10.1",
+    "mdbreact": "^4.27.0",
+    "morgan": "^1.10.0",
+    "nodemailer": "^6.4.17",
+    "pg": "^7.18.2",
+    "pg-hstore": "^2.3.3",
+    "prop-types": "^15.7.2",
+    "react": "^16.14.0",
+    "react-apollo": "^2.5.8",
+    "react-bootstrap": "^1.4.0",
+    "react-dom": "^16.14.0",
+    "react-router-dom": "^5.2.0",
+    "request": "^2.88.2",
+    "sequelize": "^5.22.3",
+    "twilio": "^3.54.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.12.10",
+    "@babel/plugin-proposal-class-properties": "7.4.0",
+    "@babel/plugin-proposal-decorators": "7.4.0",
+    "@babel/plugin-proposal-export-namespace-from": "7.2.0",
+    "@babel/plugin-proposal-function-sent": "7.2.0",
+    "@babel/plugin-proposal-json-strings": "7.
