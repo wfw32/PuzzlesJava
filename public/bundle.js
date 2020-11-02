@@ -1024,4 +1024,101 @@ var HowItWorks = /*#__PURE__*/function (_React$Component) {
         className: "how-it-works-steps"
       }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("img", {
         src: "https://image.flaticon.com/icons/png/512/60/60400.png"
-      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h5", null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("strong", null, "Step 1 ")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h6", null, "Check you
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h5", null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("strong", null, "Step 1 ")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h6", null, "Check your pantry and fridge"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+        className: "w-100"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-instructions-column"
+      }, "Take a look at the items you already have in your fridge and pantry; what ingredients would you like to include in your meal?")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-steps"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("img", {
+        src: "https://image.flaticon.com/icons/svg/1763/1763996.svg"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h5", null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("strong", null, "Step 2")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h6", null, "Take the quiz"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+        className: "w-100"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-instructions-column"
+      }, "Let us know how much time you have to prepare your meal, as well as the dairy, protein, seafood, vegetables, fruits, and grains you would like to use. You can skip any of the categories you do not have or do not want to use.")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-steps"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("img", {
+        src: "https://image.flaticon.com/icons/svg/115/115766.svg"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h5", null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("strong", null, "Step 3")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h6", null, "View your matches!"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+        className: "w-100"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-instructions-column"
+      }, "Based on your selections, we'll suggest recipes for you. Each will have a percentage score reflecting the percent of ingredients you have on hand. The higher the percentage, the fewer ingredients you are missing for that recipe.")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-steps"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("img", {
+        src: "https://image.flaticon.com/icons/svg/685/685796.svg"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h5", null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("strong", null, "Step 4")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h6", null, "Missing ingredients? Send the list to your phone!"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+        className: "w-100"
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_2__["Col"], {
+        className: "how-it-works-instructions-column"
+      }, "If you are missing ingredients, Meal.Match creates a shopping list for you and makes it easy for you to send that list to your phone. Simply click the \"Send to Phone\" option on the recipe page, and you'll receive a text with your missing ingredients.")))));
+    }
+  }]);
+
+  return HowItWorks;
+}(react__WEBPACK_IMPORTED_MODULE_0___default.a.Component);
+
+/* harmony default export */ __webpack_exports__["default"] = (HowItWorks);
+
+/***/ }),
+
+/***/ "./client/components/index.js":
+/*!************************************!*\
+  !*** ./client/components/index.js ***!
+  \************************************/
+/*! exports provided: Navigation, HomePage, Home, Quiz, CuttingBoard, QuizQuestions, About, GroceryList, HowItWorks, SearchBarResults, SingleRecipe, Text, MaxMessage, ProgressBar, GuidedTour, Footer */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _navbar__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./navbar */ "./client/components/navbar.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Navigation", function() { return _navbar__WEBPACK_IMPORTED_MODULE_0__["default"]; });
+
+/* harmony import */ var _homepage__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./homepage */ "./client/components/homepage.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "HomePage", function() { return _homepage__WEBPACK_IMPORTED_MODULE_1__["default"]; });
+
+/* harmony import */ var _home__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./home */ "./client/components/home.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Home", function() { return _home__WEBPACK_IMPORTED_MODULE_2__["default"]; });
+
+/* harmony import */ var _quiz__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./quiz */ "./client/components/quiz.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Quiz", function() { return _quiz__WEBPACK_IMPORTED_MODULE_3__["default"]; });
+
+/* harmony import */ var _cuttingBoard__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./cuttingBoard */ "./client/components/cuttingBoard.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "CuttingBoard", function() { return _cuttingBoard__WEBPACK_IMPORTED_MODULE_4__["default"]; });
+
+/* harmony import */ var _quizQuestions__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./quizQuestions */ "./client/components/quizQuestions.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "QuizQuestions", function() { return _quizQuestions__WEBPACK_IMPORTED_MODULE_5__["default"]; });
+
+/* harmony import */ var _about__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./about */ "./client/components/about.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "About", function() { return _about__WEBPACK_IMPORTED_MODULE_6__["default"]; });
+
+/* harmony import */ var _groceryList__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./groceryList */ "./client/components/groceryList.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "GroceryList", function() { return _groceryList__WEBPACK_IMPORTED_MODULE_7__["default"]; });
+
+/* harmony import */ var _howItWorks__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./howItWorks */ "./client/components/howItWorks.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "HowItWorks", function() { return _howItWorks__WEBPACK_IMPORTED_MODULE_8__["default"]; });
+
+/* harmony import */ var _searchbarResults__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ./searchbarResults */ "./client/components/searchbarResults.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "SearchBarResults", function() { return _searchbarResults__WEBPACK_IMPORTED_MODULE_9__["default"]; });
+
+/* harmony import */ var _singleRecipe__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! ./singleRecipe */ "./client/components/singleRecipe.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "SingleRecipe", function() { return _singleRecipe__WEBPACK_IMPORTED_MODULE_10__["default"]; });
+
+/* harmony import */ var _text__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! ./text */ "./client/components/text.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Text", function() { return _text__WEBPACK_IMPORTED_MODULE_11__["default"]; });
+
+/* harmony import */ var _maxMessage__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(/*! ./maxMessage */ "./client/components/maxMessage.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "MaxMessage", function() { return _maxMessage__WEBPACK_IMPORTED_MODULE_12__["default"]; });
+
+/* harmony import */ var _progressBar__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(/*! ./progressBar */ "./client/components/progressBar.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "ProgressBar", function() { return _progressBar__WEBPACK_IMPORTED_MODULE_13__["default"]; });
+
+/* harmony import */ var _guidedTour__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(/*! ./guidedTour */ "./client/components/guidedTour.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "GuidedTour", function() { return _guidedTour__WEBPACK_IMPORTED_MODULE_14__["default"]; });
+
+/* harmony import */ var _footer__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(/*! ./footer */ "./client/components/footer.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Footer", function() { return _footer__WEBPACK_IMPORTED_MODULE_15__["default"]; });
+
+/**
+ * `components/index.js` exists simply as a
