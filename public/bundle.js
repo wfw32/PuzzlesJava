@@ -1620,4 +1620,150 @@ var Quiz = /*#__PURE__*/function (_React$Component) {
 
       if (foodType === 'seafood') {
         this.setState({
-  
+          count: newCount
+        });
+      } else {
+        this.setState({
+          count: newCount,
+          alert: false
+        });
+      }
+    }
+  }, {
+    key: "handleClose",
+    value: function handleClose() {
+      this.setState({
+        show: false
+      });
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      var _this3 = this;
+
+      var foodType;
+      var questions = this.state.data[this.state.count];
+
+      if (questions !== undefined) {
+        foodType = questions.question.split(' ')[1];
+      }
+
+      var show = true;
+      return this.state.data[0] ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+        className: "quiz-background"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Container"], {
+        className: "quiz-container",
+        xs: 12,
+        md: 12,
+        lg: 12
+      }, this.state.count === 0 ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Alert"], {
+        dismissible: "true",
+        className: "quiz-alert",
+        show: this.state.show,
+        onClose: this.handleClose
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Alert"].Heading, null, "Check Your Pantry and Make Your Selection!"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("p", null, "Help Meal.Match best match you to recipes using ingredients already in your pantry and fridge!", /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("br", null), " First, take a look at your pantry and fridge, then choose the options you want to cook with in our survey below.")) : null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Row"], {
+        style: {
+          paddingTop: 25
+        }
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], {
+        xs: 3
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], {
+        className: "quiz-questions-count"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h3", null, this.state.count + 1, "/7")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], {
+        xs: 8,
+        className: "quiz-questions-question"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h2", null, "Q.", this.state.count + 1, " ", questions.question), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(_index__WEBPACK_IMPORTED_MODULE_1__["MaxMessage"], {
+        max: this.state.data[this.state.count].max,
+        foodType: this.state.data[this.state.count].question.split(' ')[1],
+        alert: this.state.alert,
+        length: this.state[foodType].length,
+        food: foodType
+      })), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], {
+        xs: 1
+      })), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(_index__WEBPACK_IMPORTED_MODULE_1__["ProgressBar"], {
+        count: this.state.count
+      }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Row"], null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], {
+        sm: 4,
+        md: 4,
+        lg: 4,
+        className: "quiz-columns"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("h3", null, !this.state.time ? '' : this.state.time), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(_index__WEBPACK_IMPORTED_MODULE_1__["CuttingBoard"], {
+        sendFunction: this.removeIngredient,
+        ingredients: this.state.ingredients,
+        time: this.state.time,
+        meats: this.state.meats,
+        seafood: this.state.seafood
+      })), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], {
+        className: "quiz-columns"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Row"], {
+        className: "quiz-row-options"
+      }, questions.image.map(function (picture, index) {
+        return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+          key: Math.random()
+        }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("div", {
+          className: "option-with-label "
+        }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("strong", {
+          className: "label"
+        }, questions.name[index]), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement("img", {
+          className: "".concat(_this3.state.ingredients.includes(questions.name[index]) || _this3.state.time.includes(questions.name[index]) ? 'selected' : 'options'),
+          src: picture,
+          alt: questions.name[index],
+          id: questions.name[index],
+          onClick: function onClick() {
+            return _this3.state.ingredients.includes(event.target.alt) ? _this3.removeIngredient(event) : foodType !== 'time' ? _this3.filterOutIngredients(event, foodType) : _this3.setTime(event);
+          }
+        })));
+      })), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Row"], {
+        className: "quiz-prev-next-buttons"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], null, this.state.count > 0 ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Button"], {
+        className: "skipNextPrevButtons",
+        onClick: function onClick() {
+          return _this3.decreaseCount();
+        }
+      }, '<< Previous') : null), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Col"], null, this.state.count === this.state.data.length - 1 ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_router_dom__WEBPACK_IMPORTED_MODULE_4__["Link"], {
+        to: {
+          pathname: '/results',
+          state: {
+            theIngredients: this.state.ingredients,
+            theMeats: this.state.meats,
+            theSeafood: this.state.seafood,
+            time: this.state.time
+          }
+        }
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Button"], {
+        className: "btn-submit quiz-next-button"
+      }, "Submit")) : /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default.a.createElement(react_bootstrap__WEBPACK_IMPORTED_MODULE_3__["Button"], {
+        className: "skipNextPrevButtons quiz-next-button",
+        onClick: function onClick() {
+          return _this3.increaseCount(foodType);
+        }
+      }, this.state[foodType].length > 0 ? 'Next >>' : 'Skip >>'))))))) : 'Loading...';
+    }
+  }]);
+
+  return Quiz;
+}(react__WEBPACK_IMPORTED_MODULE_0___default.a.Component);
+
+
+
+/***/ }),
+
+/***/ "./client/components/quizQuestions.js":
+/*!********************************************!*\
+  !*** ./client/components/quizQuestions.js ***!
+  \********************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "default", function() { return Questions; });
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var axios__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! axios */ "./node_modules/axios/index.js");
+/* harmony import */ var axios__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(axios__WEBPACK_IMPORTED_MODULE_1__);
+function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return typeof obj; }; } else { _typeof = function _typeof(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
+
+function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
+
+function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); };
