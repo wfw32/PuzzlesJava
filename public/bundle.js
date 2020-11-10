@@ -1427,4 +1427,197 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
 
 function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
 
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects mu
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && Symbol.iterator in Object(iter)) return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
+function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
+
+function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
+
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function"); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, writable: true, configurable: true } }); if (superClass) _setPrototypeOf(subClass, superClass); }
+
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+function _createSuper(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct(); return function _createSuperInternal() { var Super = _getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = _getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return _possibleConstructorReturn(this, result); }; }
+
+function _possibleConstructorReturn(self, call) { if (call && (_typeof(call) === "object" || typeof call === "function")) { return call; } return _assertThisInitialized(self); }
+
+function _assertThisInitialized(self) { if (self === void 0) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return self; }
+
+function _isNativeReflectConstruct() { if (typeof Reflect === "undefined" || !Reflect.construct) return false; if (Reflect.construct.sham) return false; if (typeof Proxy === "function") return true; try { Date.prototype.toString.call(Reflect.construct(Date, [], function () {})); return true; } catch (e) { return false; } }
+
+function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) { return o.__proto__ || Object.getPrototypeOf(o); }; return _getPrototypeOf(o); }
+
+
+
+
+
+
+
+var Quiz = /*#__PURE__*/function (_React$Component) {
+  _inherits(Quiz, _React$Component);
+
+  var _super = _createSuper(Quiz);
+
+  function Quiz() {
+    var _this;
+
+    _classCallCheck(this, Quiz);
+
+    _this = _super.call(this);
+    _this.state = {
+      count: 0,
+      time: '',
+      meats: [],
+      seafood: [],
+      dairy: [],
+      'vegetable(s)': [],
+      'fruit(s)': [],
+      'grain(s)': [],
+      ingredients: [],
+      data: [],
+      alert: false,
+      selected: '',
+      matchMeDisabled: true,
+      show: true // if any additional fields are added to state, they may need to be included as exclusions in the removeIngredient function
+
+    };
+    _this.removeIngredient = _this.removeIngredient.bind(_assertThisInitialized(_this));
+    _this.increaseCount = _this.increaseCount.bind(_assertThisInitialized(_this));
+    _this.decreaseCount = _this.decreaseCount.bind(_assertThisInitialized(_this));
+    _this.addToIngredients = _this.addToIngredients.bind(_assertThisInitialized(_this));
+    _this.filterOutIngredients = _this.filterOutIngredients.bind(_assertThisInitialized(_this));
+    _this.setTime = _this.setTime.bind(_assertThisInitialized(_this));
+    _this.handleClose = _this.handleClose.bind(_assertThisInitialized(_this));
+    return _this;
+  }
+
+  _createClass(Quiz, [{
+    key: "componentDidMount",
+    value: function () {
+      var _componentDidMount = _asyncToGenerator( /*#__PURE__*/regeneratorRuntime.mark(function _callee() {
+        var _yield$axios$get, data;
+
+        return regeneratorRuntime.wrap(function _callee$(_context) {
+          while (1) {
+            switch (_context.prev = _context.next) {
+              case 0:
+                _context.next = 2;
+                return axios__WEBPACK_IMPORTED_MODULE_2___default.a.get('/api/questions');
+
+              case 2:
+                _yield$axios$get = _context.sent;
+                data = _yield$axios$get.data;
+                this.setState({
+                  data: data
+                });
+
+              case 5:
+              case "end":
+                return _context.stop();
+            }
+          }
+        }, _callee, this);
+      }));
+
+      function componentDidMount() {
+        return _componentDidMount.apply(this, arguments);
+      }
+
+      return componentDidMount;
+    }()
+  }, {
+    key: "filterOutIngredients",
+    value: function filterOutIngredients(event, foodType) {
+      var max = this.state.data[this.state.count].max;
+      var meatAndSeafoodLength = this.state.meats.length + this.state.seafood.length;
+
+      if (!this.state.ingredients.includes(event.target.alt) && this.state[foodType].length < max) {
+        if (foodType !== 'meats' && foodType !== 'seafood') {
+          this.addToIngredients(event.target.alt, true, foodType);
+        } else if (foodType === 'meats' || foodType === 'seafood') {
+          meatAndSeafoodLength < 2 ? this.addToIngredients(event.target.alt, true, foodType) : this.addToIngredients(null, false);
+        }
+      } else {
+        this.addToIngredients(null, false);
+      }
+    }
+  }, {
+    key: "addToIngredients",
+    value: function addToIngredients(food, _boolean, foodType) {
+      var _this$setState;
+
+      _boolean ? this.setState((_this$setState = {
+        ingredients: [].concat(_toConsumableArray(this.state.ingredients), [food])
+      }, _defineProperty(_this$setState, foodType, [].concat(_toConsumableArray(this.state[foodType]), [food])), _defineProperty(_this$setState, "alert", false), _defineProperty(_this$setState, "matchMeDisabled", false), _this$setState)) : this.setState({
+        alert: true
+      });
+    }
+  }, {
+    key: "setTime",
+    value: function setTime(event) {
+      this.setState({
+        time: event.target.alt
+      });
+    }
+  }, {
+    key: "removeIngredient",
+    value: function removeIngredient(event) {
+      var _this2 = this,
+          _this$setState2,
+          _this$setState3;
+
+      var ingredientsLeft = this.state.ingredients.filter(function (item) {
+        return item !== event.target.id;
+      });
+      var foodType = Object.keys(this.state).filter(function (food) {
+        return Array.isArray(_this2.state[food]) && food !== 'data' && food !== 'ingredients';
+      }).filter(function (food) {
+        return _this2.state[food].includes(event.target.id);
+      })[0];
+      var foodTypeIngredientsLeft = this.state[foodType].filter(function (item) {
+        return item !== event.target.id;
+      });
+      this.state.ingredients.length === 1 ? this.setState((_this$setState2 = {
+        ingredients: ingredientsLeft
+      }, _defineProperty(_this$setState2, foodType, foodTypeIngredientsLeft), _defineProperty(_this$setState2, "alert", false), _defineProperty(_this$setState2, "matchMeDisabled", true), _this$setState2)) : this.setState((_this$setState3 = {
+        ingredients: ingredientsLeft
+      }, _defineProperty(_this$setState3, foodType, foodTypeIngredientsLeft), _defineProperty(_this$setState3, "alert", false), _this$setState3));
+    }
+  }, {
+    key: "increaseCount",
+    value: function increaseCount(foodType) {
+      var newCount = this.state.count + 1;
+
+      if (foodType === 'meats') {
+        this.setState({
+          count: newCount
+        });
+      } else {
+        this.setState({
+          count: newCount,
+          alert: false
+        });
+      }
+    }
+  }, {
+    key: "decreaseCount",
+    value: function decreaseCount(foodType) {
+      var newCount = this.state.count - 1;
+
+      if (foodType === 'seafood') {
+        this.setState({
+  
