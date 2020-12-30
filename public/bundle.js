@@ -7083,4 +7083,214 @@ var StoreReader = (function () {
         };
         return this.executeSelectionSet({
             selectionSet: mainDefinition.selectionSet,
-            roo
+            rootValue: rootValue,
+            execContext: execContext,
+        });
+    };
+    StoreReader.prototype.executeSelectionSet = function (_a) {
+        var _this = this;
+        var selectionSet = _a.selectionSet, rootValue = _a.rootValue, execContext = _a.execContext;
+        var fragmentMap = execContext.fragmentMap, contextValue = execContext.contextValue, variables = execContext.variableValues;
+        var finalResult = { result: null };
+        var objectsToMerge = [];
+        var object = contextValue.store.get(rootValue.id);
+        var typename = (object && object.__typename) ||
+            (rootValue.id === 'ROOT_QUERY' && 'Query') ||
+            void 0;
+        function handleMissing(result) {
+            var _a;
+            if (result.missing) {
+                finalResult.missing = finalResult.missing || [];
+                (_a = finalResult.missing).push.apply(_a, result.missing);
+            }
+            return result.result;
+        }
+        selectionSet.selections.forEach(function (selection) {
+            var _a;
+            if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["shouldInclude"])(selection, variables)) {
+                return;
+            }
+            if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isField"])(selection)) {
+                var fieldResult = handleMissing(_this.executeField(object, typename, selection, execContext));
+                if (typeof fieldResult !== 'undefined') {
+                    objectsToMerge.push((_a = {},
+                        _a[Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["resultKeyNameFromField"])(selection)] = fieldResult,
+                        _a));
+                }
+            }
+            else {
+                var fragment = void 0;
+                if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isInlineFragment"])(selection)) {
+                    fragment = selection;
+                }
+                else {
+                    fragment = fragmentMap[selection.name.value];
+                    if (!fragment) {
+                        throw  false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]("No fragment named " + selection.name.value);
+                    }
+                }
+                var typeCondition = fragment.typeCondition && fragment.typeCondition.name.value;
+                var match = !typeCondition ||
+                    execContext.fragmentMatcher(rootValue, typeCondition, contextValue);
+                if (match) {
+                    var fragmentExecResult = _this.executeSelectionSet({
+                        selectionSet: fragment.selectionSet,
+                        rootValue: rootValue,
+                        execContext: execContext,
+                    });
+                    if (match === 'heuristic' && fragmentExecResult.missing) {
+                        fragmentExecResult = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, fragmentExecResult), { missing: fragmentExecResult.missing.map(function (info) {
+                                return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, info), { tolerable: true });
+                            }) });
+                    }
+                    objectsToMerge.push(handleMissing(fragmentExecResult));
+                }
+            }
+        });
+        finalResult.result = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["mergeDeepArray"])(objectsToMerge);
+        if (this.freezeResults && "development" !== 'production') {
+            Object.freeze(finalResult.result);
+        }
+        return finalResult;
+    };
+    StoreReader.prototype.executeField = function (object, typename, field, execContext) {
+        var variables = execContext.variableValues, contextValue = execContext.contextValue;
+        var fieldName = field.name.value;
+        var args = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["argumentsObjectFromField"])(field, variables);
+        var info = {
+            resultKey: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["resultKeyNameFromField"])(field),
+            directives: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getDirectiveInfoFromField"])(field, variables),
+        };
+        var readStoreResult = readStoreResolver(object, typename, fieldName, args, contextValue, info);
+        if (Array.isArray(readStoreResult.result)) {
+            return this.combineExecResults(readStoreResult, this.executeSubSelectedArray({
+                field: field,
+                array: readStoreResult.result,
+                execContext: execContext,
+            }));
+        }
+        if (!field.selectionSet) {
+            assertSelectionSetForIdValue(field, readStoreResult.result);
+            if (this.freezeResults && "development" !== 'production') {
+                Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["maybeDeepFreeze"])(readStoreResult);
+            }
+            return readStoreResult;
+        }
+        if (readStoreResult.result == null) {
+            return readStoreResult;
+        }
+        return this.combineExecResults(readStoreResult, this.executeSelectionSet({
+            selectionSet: field.selectionSet,
+            rootValue: readStoreResult.result,
+            execContext: execContext,
+        }));
+    };
+    StoreReader.prototype.combineExecResults = function () {
+        var execResults = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            execResults[_i] = arguments[_i];
+        }
+        var missing;
+        execResults.forEach(function (execResult) {
+            if (execResult.missing) {
+                missing = missing || [];
+                missing.push.apply(missing, execResult.missing);
+            }
+        });
+        return {
+            result: execResults.pop().result,
+            missing: missing,
+        };
+    };
+    StoreReader.prototype.executeSubSelectedArray = function (_a) {
+        var _this = this;
+        var field = _a.field, array = _a.array, execContext = _a.execContext;
+        var missing;
+        function handleMissing(childResult) {
+            if (childResult.missing) {
+                missing = missing || [];
+                missing.push.apply(missing, childResult.missing);
+            }
+            return childResult.result;
+        }
+        array = array.map(function (item) {
+            if (item === null) {
+                return null;
+            }
+            if (Array.isArray(item)) {
+                return handleMissing(_this.executeSubSelectedArray({
+                    field: field,
+                    array: item,
+                    execContext: execContext,
+                }));
+            }
+            if (field.selectionSet) {
+                return handleMissing(_this.executeSelectionSet({
+                    selectionSet: field.selectionSet,
+                    rootValue: item,
+                    execContext: execContext,
+                }));
+            }
+            assertSelectionSetForIdValue(field, item);
+            return item;
+        });
+        if (this.freezeResults && "development" !== 'production') {
+            Object.freeze(array);
+        }
+        return { result: array, missing: missing };
+    };
+    return StoreReader;
+}());
+function assertSelectionSetForIdValue(field, value) {
+    if (!field.selectionSet && Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isIdValue"])(value)) {
+        throw  false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]("Missing selection set for object of type " + value.typename + " returned for query field " + field.name.value);
+    }
+}
+function defaultFragmentMatcher() {
+    return true;
+}
+function assertIdValue(idValue) {
+     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isIdValue"])(idValue), "Encountered a sub-selection on the query, but the store doesn't have an object reference. This should never happen during normal use unless you have custom code that is directly manipulating the store; please file an issue.");
+}
+function readStoreResolver(object, typename, fieldName, args, context, _a) {
+    var resultKey = _a.resultKey, directives = _a.directives;
+    var storeKeyName = fieldName;
+    if (args || directives) {
+        storeKeyName = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getStoreKeyName"])(storeKeyName, args, directives);
+    }
+    var fieldValue = void 0;
+    if (object) {
+        fieldValue = object[storeKeyName];
+        if (typeof fieldValue === 'undefined' &&
+            context.cacheRedirects &&
+            typeof typename === 'string') {
+            var type = context.cacheRedirects[typename];
+            if (type) {
+                var resolver = type[fieldName];
+                if (resolver) {
+                    fieldValue = resolver(object, args, {
+                        getCacheKey: function (storeObj) {
+                            var id = context.dataIdFromObject(storeObj);
+                            return id && Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["toIdValue"])({
+                                id: id,
+                                typename: storeObj.__typename,
+                            });
+                        },
+                    });
+                }
+            }
+        }
+    }
+    if (typeof fieldValue === 'undefined') {
+        return {
+            result: fieldValue,
+            missing: [{
+                    object: object,
+                    fieldName: storeKeyName,
+                    tolerable: false,
+                }],
+        };
+    }
+    if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isJsonValue"])(fieldValue)) {
+        fieldValue = fieldValue.json;
+  
