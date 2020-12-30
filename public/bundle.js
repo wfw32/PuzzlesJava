@@ -7293,4 +7293,203 @@ function readStoreResolver(object, typename, fieldName, args, context, _a) {
     }
     if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isJsonValue"])(fieldValue)) {
         fieldValue = fieldValue.json;
-  
+    }
+    return {
+        result: fieldValue,
+    };
+}
+
+var ObjectCache = (function () {
+    function ObjectCache(data) {
+        if (data === void 0) { data = Object.create(null); }
+        this.data = data;
+    }
+    ObjectCache.prototype.toObject = function () {
+        return this.data;
+    };
+    ObjectCache.prototype.get = function (dataId) {
+        return this.data[dataId];
+    };
+    ObjectCache.prototype.set = function (dataId, value) {
+        this.data[dataId] = value;
+    };
+    ObjectCache.prototype.delete = function (dataId) {
+        this.data[dataId] = void 0;
+    };
+    ObjectCache.prototype.clear = function () {
+        this.data = Object.create(null);
+    };
+    ObjectCache.prototype.replace = function (newData) {
+        this.data = newData || Object.create(null);
+    };
+    return ObjectCache;
+}());
+function defaultNormalizedCacheFactory$1(seed) {
+    return new ObjectCache(seed);
+}
+
+var WriteError = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(WriteError, _super);
+    function WriteError() {
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.type = 'WriteError';
+        return _this;
+    }
+    return WriteError;
+}(Error));
+function enhanceErrorWithDocument(error, document) {
+    var enhancedError = new WriteError("Error writing result to store for query:\n " + JSON.stringify(document));
+    enhancedError.message += '\n' + error.message;
+    enhancedError.stack = error.stack;
+    return enhancedError;
+}
+var StoreWriter = (function () {
+    function StoreWriter() {
+    }
+    StoreWriter.prototype.writeQueryToStore = function (_a) {
+        var query = _a.query, result = _a.result, _b = _a.store, store = _b === void 0 ? defaultNormalizedCacheFactory() : _b, variables = _a.variables, dataIdFromObject = _a.dataIdFromObject, fragmentMatcherFunction = _a.fragmentMatcherFunction;
+        return this.writeResultToStore({
+            dataId: 'ROOT_QUERY',
+            result: result,
+            document: query,
+            store: store,
+            variables: variables,
+            dataIdFromObject: dataIdFromObject,
+            fragmentMatcherFunction: fragmentMatcherFunction,
+        });
+    };
+    StoreWriter.prototype.writeResultToStore = function (_a) {
+        var dataId = _a.dataId, result = _a.result, document = _a.document, _b = _a.store, store = _b === void 0 ? defaultNormalizedCacheFactory() : _b, variables = _a.variables, dataIdFromObject = _a.dataIdFromObject, fragmentMatcherFunction = _a.fragmentMatcherFunction;
+        var operationDefinition = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getOperationDefinition"])(document);
+        try {
+            return this.writeSelectionSetToStore({
+                result: result,
+                dataId: dataId,
+                selectionSet: operationDefinition.selectionSet,
+                context: {
+                    store: store,
+                    processedData: {},
+                    variables: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["assign"])({}, Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getDefaultValues"])(operationDefinition), variables),
+                    dataIdFromObject: dataIdFromObject,
+                    fragmentMap: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["createFragmentMap"])(Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getFragmentDefinitions"])(document)),
+                    fragmentMatcherFunction: fragmentMatcherFunction,
+                },
+            });
+        }
+        catch (e) {
+            throw enhanceErrorWithDocument(e, document);
+        }
+    };
+    StoreWriter.prototype.writeSelectionSetToStore = function (_a) {
+        var _this = this;
+        var result = _a.result, dataId = _a.dataId, selectionSet = _a.selectionSet, context = _a.context;
+        var variables = context.variables, store = context.store, fragmentMap = context.fragmentMap;
+        selectionSet.selections.forEach(function (selection) {
+            var _a;
+            if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["shouldInclude"])(selection, variables)) {
+                return;
+            }
+            if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isField"])(selection)) {
+                var resultFieldKey = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["resultKeyNameFromField"])(selection);
+                var value = result[resultFieldKey];
+                if (typeof value !== 'undefined') {
+                    _this.writeFieldToStore({
+                        dataId: dataId,
+                        value: value,
+                        field: selection,
+                        context: context,
+                    });
+                }
+                else {
+                    var isDefered = false;
+                    var isClient = false;
+                    if (selection.directives && selection.directives.length) {
+                        isDefered = selection.directives.some(function (directive) { return directive.name && directive.name.value === 'defer'; });
+                        isClient = selection.directives.some(function (directive) { return directive.name && directive.name.value === 'client'; });
+                    }
+                    if (!isDefered && !isClient && context.fragmentMatcherFunction) {
+                         false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn("Missing field " + resultFieldKey + " in " + JSON.stringify(result, null, 2).substring(0, 100));
+                    }
+                }
+            }
+            else {
+                var fragment = void 0;
+                if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isInlineFragment"])(selection)) {
+                    fragment = selection;
+                }
+                else {
+                    fragment = (fragmentMap || {})[selection.name.value];
+                     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(fragment, "No fragment named " + selection.name.value + ".");
+                }
+                var matches = true;
+                if (context.fragmentMatcherFunction && fragment.typeCondition) {
+                    var id = dataId || 'self';
+                    var idValue = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["toIdValue"])({ id: id, typename: undefined });
+                    var fakeContext = {
+                        store: new ObjectCache((_a = {}, _a[id] = result, _a)),
+                        cacheRedirects: {},
+                    };
+                    var match = context.fragmentMatcherFunction(idValue, fragment.typeCondition.name.value, fakeContext);
+                    if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isProduction"])() && match === 'heuristic') {
+                         false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].error('WARNING: heuristic fragment matching going on!');
+                    }
+                    matches = !!match;
+                }
+                if (matches) {
+                    _this.writeSelectionSetToStore({
+                        result: result,
+                        selectionSet: fragment.selectionSet,
+                        dataId: dataId,
+                        context: context,
+                    });
+                }
+            }
+        });
+        return store;
+    };
+    StoreWriter.prototype.writeFieldToStore = function (_a) {
+        var _b;
+        var field = _a.field, value = _a.value, dataId = _a.dataId, context = _a.context;
+        var variables = context.variables, dataIdFromObject = context.dataIdFromObject, store = context.store;
+        var storeValue;
+        var storeObject;
+        var storeFieldName = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["storeKeyNameFromField"])(field, variables);
+        if (!field.selectionSet || value === null) {
+            storeValue =
+                value != null && typeof value === 'object'
+                    ?
+                        { type: 'json', json: value }
+                    :
+                        value;
+        }
+        else if (Array.isArray(value)) {
+            var generatedId = dataId + "." + storeFieldName;
+            storeValue = this.processArrayValue(value, generatedId, field.selectionSet, context);
+        }
+        else {
+            var valueDataId = dataId + "." + storeFieldName;
+            var generated = true;
+            if (!isGeneratedId(valueDataId)) {
+                valueDataId = '$' + valueDataId;
+            }
+            if (dataIdFromObject) {
+                var semanticId = dataIdFromObject(value);
+                 false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!semanticId || !isGeneratedId(semanticId), 'IDs returned by dataIdFromObject cannot begin with the "$" character.');
+                if (semanticId ||
+                    (typeof semanticId === 'number' && semanticId === 0)) {
+                    valueDataId = semanticId;
+                    generated = false;
+                }
+            }
+            if (!isDataProcessed(valueDataId, field, context.processedData)) {
+                this.writeSelectionSetToStore({
+                    dataId: valueDataId,
+                    result: value,
+                    selectionSet: field.selectionSet,
+                    context: context,
+                });
+            }
+            var typename = value.__typename;
+            storeValue = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["toIdValue"])({ id: valueDataId, typename: typename }, generated);
+            storeObject = store.get(dataId);
+            var escapedId = storeObject && storeObject[storeFieldN
