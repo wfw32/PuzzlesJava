@@ -6889,3 +6889,198 @@ var HeuristicFragmentMatcher = (function () {
 }());
 var IntrospectionFragmentMatcher = (function () {
     function IntrospectionFragmentMatcher(options) {
+        if (options && options.introspectionQueryResultData) {
+            this.possibleTypesMap = this.parseIntrospectionResult(options.introspectionQueryResultData);
+            this.isReady = true;
+        }
+        else {
+            this.isReady = false;
+        }
+        this.match = this.match.bind(this);
+    }
+    IntrospectionFragmentMatcher.prototype.match = function (idValue, typeCondition, context) {
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(this.isReady, 'FragmentMatcher.match() was called before FragmentMatcher.init()');
+        var obj = context.store.get(idValue.id);
+        var isRootQuery = idValue.id === 'ROOT_QUERY';
+        if (!obj) {
+            return isRootQuery;
+        }
+        var _a = obj.__typename, __typename = _a === void 0 ? isRootQuery && 'Query' : _a;
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(__typename, "Cannot match fragment because __typename property is missing: " + JSON.stringify(obj));
+        if (__typename === typeCondition) {
+            return true;
+        }
+        var implementingTypes = this.possibleTypesMap[typeCondition];
+        if (__typename &&
+            implementingTypes &&
+            implementingTypes.indexOf(__typename) > -1) {
+            return true;
+        }
+        return false;
+    };
+    IntrospectionFragmentMatcher.prototype.parseIntrospectionResult = function (introspectionResultData) {
+        var typeMap = {};
+        introspectionResultData.__schema.types.forEach(function (type) {
+            if (type.kind === 'UNION' || type.kind === 'INTERFACE') {
+                typeMap[type.name] = type.possibleTypes.map(function (implementingType) { return implementingType.name; });
+            }
+        });
+        return typeMap;
+    };
+    return IntrospectionFragmentMatcher;
+}());
+
+var hasOwn = Object.prototype.hasOwnProperty;
+var DepTrackingCache = (function () {
+    function DepTrackingCache(data) {
+        var _this = this;
+        if (data === void 0) { data = Object.create(null); }
+        this.data = data;
+        this.depend = Object(optimism__WEBPACK_IMPORTED_MODULE_3__["wrap"])(function (dataId) { return _this.data[dataId]; }, {
+            disposable: true,
+            makeCacheKey: function (dataId) {
+                return dataId;
+            },
+        });
+    }
+    DepTrackingCache.prototype.toObject = function () {
+        return this.data;
+    };
+    DepTrackingCache.prototype.get = function (dataId) {
+        this.depend(dataId);
+        return this.data[dataId];
+    };
+    DepTrackingCache.prototype.set = function (dataId, value) {
+        var oldValue = this.data[dataId];
+        if (value !== oldValue) {
+            this.data[dataId] = value;
+            this.depend.dirty(dataId);
+        }
+    };
+    DepTrackingCache.prototype.delete = function (dataId) {
+        if (hasOwn.call(this.data, dataId)) {
+            delete this.data[dataId];
+            this.depend.dirty(dataId);
+        }
+    };
+    DepTrackingCache.prototype.clear = function () {
+        this.replace(null);
+    };
+    DepTrackingCache.prototype.replace = function (newData) {
+        var _this = this;
+        if (newData) {
+            Object.keys(newData).forEach(function (dataId) {
+                _this.set(dataId, newData[dataId]);
+            });
+            Object.keys(this.data).forEach(function (dataId) {
+                if (!hasOwn.call(newData, dataId)) {
+                    _this.delete(dataId);
+                }
+            });
+        }
+        else {
+            Object.keys(this.data).forEach(function (dataId) {
+                _this.delete(dataId);
+            });
+        }
+    };
+    return DepTrackingCache;
+}());
+function defaultNormalizedCacheFactory(seed) {
+    return new DepTrackingCache(seed);
+}
+
+var StoreReader = (function () {
+    function StoreReader(_a) {
+        var _this = this;
+        var _b = _a === void 0 ? {} : _a, _c = _b.cacheKeyRoot, cacheKeyRoot = _c === void 0 ? new optimism__WEBPACK_IMPORTED_MODULE_3__["KeyTrie"](apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["canUseWeakMap"]) : _c, _d = _b.freezeResults, freezeResults = _d === void 0 ? false : _d;
+        var _e = this, executeStoreQuery = _e.executeStoreQuery, executeSelectionSet = _e.executeSelectionSet, executeSubSelectedArray = _e.executeSubSelectedArray;
+        this.freezeResults = freezeResults;
+        this.executeStoreQuery = Object(optimism__WEBPACK_IMPORTED_MODULE_3__["wrap"])(function (options) {
+            return executeStoreQuery.call(_this, options);
+        }, {
+            makeCacheKey: function (_a) {
+                var query = _a.query, rootValue = _a.rootValue, contextValue = _a.contextValue, variableValues = _a.variableValues, fragmentMatcher = _a.fragmentMatcher;
+                if (contextValue.store instanceof DepTrackingCache) {
+                    return cacheKeyRoot.lookup(contextValue.store, query, fragmentMatcher, JSON.stringify(variableValues), rootValue.id);
+                }
+            }
+        });
+        this.executeSelectionSet = Object(optimism__WEBPACK_IMPORTED_MODULE_3__["wrap"])(function (options) {
+            return executeSelectionSet.call(_this, options);
+        }, {
+            makeCacheKey: function (_a) {
+                var selectionSet = _a.selectionSet, rootValue = _a.rootValue, execContext = _a.execContext;
+                if (execContext.contextValue.store instanceof DepTrackingCache) {
+                    return cacheKeyRoot.lookup(execContext.contextValue.store, selectionSet, execContext.fragmentMatcher, JSON.stringify(execContext.variableValues), rootValue.id);
+                }
+            }
+        });
+        this.executeSubSelectedArray = Object(optimism__WEBPACK_IMPORTED_MODULE_3__["wrap"])(function (options) {
+            return executeSubSelectedArray.call(_this, options);
+        }, {
+            makeCacheKey: function (_a) {
+                var field = _a.field, array = _a.array, execContext = _a.execContext;
+                if (execContext.contextValue.store instanceof DepTrackingCache) {
+                    return cacheKeyRoot.lookup(execContext.contextValue.store, field, array, JSON.stringify(execContext.variableValues));
+                }
+            }
+        });
+    }
+    StoreReader.prototype.readQueryFromStore = function (options) {
+        return this.diffQueryAgainstStore(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, options), { returnPartialData: false })).result;
+    };
+    StoreReader.prototype.diffQueryAgainstStore = function (_a) {
+        var store = _a.store, query = _a.query, variables = _a.variables, previousResult = _a.previousResult, _b = _a.returnPartialData, returnPartialData = _b === void 0 ? true : _b, _c = _a.rootId, rootId = _c === void 0 ? 'ROOT_QUERY' : _c, fragmentMatcherFunction = _a.fragmentMatcherFunction, config = _a.config;
+        var queryDefinition = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getQueryDefinition"])(query);
+        variables = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["assign"])({}, Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getDefaultValues"])(queryDefinition), variables);
+        var context = {
+            store: store,
+            dataIdFromObject: config && config.dataIdFromObject,
+            cacheRedirects: (config && config.cacheRedirects) || {},
+        };
+        var execResult = this.executeStoreQuery({
+            query: query,
+            rootValue: {
+                type: 'id',
+                id: rootId,
+                generated: true,
+                typename: 'Query',
+            },
+            contextValue: context,
+            variableValues: variables,
+            fragmentMatcher: fragmentMatcherFunction,
+        });
+        var hasMissingFields = execResult.missing && execResult.missing.length > 0;
+        if (hasMissingFields && !returnPartialData) {
+            execResult.missing.forEach(function (info) {
+                if (info.tolerable)
+                    return;
+                throw  false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]("Can't find field " + info.fieldName + " on object " + JSON.stringify(info.object, null, 2) + ".");
+            });
+        }
+        if (previousResult) {
+            if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isEqual"])(previousResult, execResult.result)) {
+                execResult.result = previousResult;
+            }
+        }
+        return {
+            result: execResult.result,
+            complete: !hasMissingFields,
+        };
+    };
+    StoreReader.prototype.executeStoreQuery = function (_a) {
+        var query = _a.query, rootValue = _a.rootValue, contextValue = _a.contextValue, variableValues = _a.variableValues, _b = _a.fragmentMatcher, fragmentMatcher = _b === void 0 ? defaultFragmentMatcher : _b;
+        var mainDefinition = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getMainDefinition"])(query);
+        var fragments = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["getFragmentDefinitions"])(query);
+        var fragmentMap = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["createFragmentMap"])(fragments);
+        var execContext = {
+            query: query,
+            fragmentMap: fragmentMap,
+            contextValue: contextValue,
+            variableValues: variableValues,
+            fragmentMatcher: fragmentMatcher,
+        };
+        return this.executeSelectionSet({
+            selectionSet: mainDefinition.selectionSet,
+            roo
