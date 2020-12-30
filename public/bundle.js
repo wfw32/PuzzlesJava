@@ -6722,4 +6722,170 @@ var DefaultClient = (function (_super) {
                     ("" + diff.join(' ')));
             }
         }
-        var request = config.request, uri = config.uri, credentials = config.credentials, headers = config.headers, fetch = config.fetch, fetchOptions = config.fetchOptions, clientState = config.clientState, cacheRedirects = config.cacheRedirects, errorCallback = config.onError, name = config.name, version = config.version, resolvers = config.resolvers, typeDefs = config.typeDefs, fragmentMatcher = config.fragmentMatch
+        var request = config.request, uri = config.uri, credentials = config.credentials, headers = config.headers, fetch = config.fetch, fetchOptions = config.fetchOptions, clientState = config.clientState, cacheRedirects = config.cacheRedirects, errorCallback = config.onError, name = config.name, version = config.version, resolvers = config.resolvers, typeDefs = config.typeDefs, fragmentMatcher = config.fragmentMatcher;
+        var cache = config.cache;
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_7__["invariant"])(!cache || !cacheRedirects, 'Incompatible cache configuration. If providing `cache` then ' +
+            'configure the provided instance with `cacheRedirects` instead.');
+        if (!cache) {
+            cache = cacheRedirects
+                ? new apollo_cache_inmemory__WEBPACK_IMPORTED_MODULE_3__["InMemoryCache"]({ cacheRedirects: cacheRedirects })
+                : new apollo_cache_inmemory__WEBPACK_IMPORTED_MODULE_3__["InMemoryCache"]();
+        }
+        var errorLink = errorCallback
+            ? Object(apollo_link_error__WEBPACK_IMPORTED_MODULE_5__["onError"])(errorCallback)
+            : Object(apollo_link_error__WEBPACK_IMPORTED_MODULE_5__["onError"])(function (_a) {
+                var graphQLErrors = _a.graphQLErrors, networkError = _a.networkError;
+                if (graphQLErrors) {
+                    graphQLErrors.map(function (_a) {
+                        var message = _a.message, locations = _a.locations, path = _a.path;
+                        return  false || ts_invariant__WEBPACK_IMPORTED_MODULE_7__["invariant"].warn("[GraphQL error]: Message: " + message + ", Location: " +
+                            (locations + ", Path: " + path));
+                    });
+                }
+                if (networkError) {
+                     false || ts_invariant__WEBPACK_IMPORTED_MODULE_7__["invariant"].warn("[Network error]: " + networkError);
+                }
+            });
+        var requestHandler = request
+            ? new apollo_link__WEBPACK_IMPORTED_MODULE_2__["ApolloLink"](function (operation, forward) {
+                return new apollo_link__WEBPACK_IMPORTED_MODULE_2__["Observable"](function (observer) {
+                    var handle;
+                    Promise.resolve(operation)
+                        .then(function (oper) { return request(oper); })
+                        .then(function () {
+                        handle = forward(operation).subscribe({
+                            next: observer.next.bind(observer),
+                            error: observer.error.bind(observer),
+                            complete: observer.complete.bind(observer),
+                        });
+                    })
+                        .catch(observer.error.bind(observer));
+                    return function () {
+                        if (handle) {
+                            handle.unsubscribe();
+                        }
+                    };
+                });
+            })
+            : false;
+        var httpLink = new apollo_link_http__WEBPACK_IMPORTED_MODULE_4__["HttpLink"]({
+            uri: uri || '/graphql',
+            fetch: fetch,
+            fetchOptions: fetchOptions || {},
+            credentials: credentials || 'same-origin',
+            headers: headers || {},
+        });
+        var link = apollo_link__WEBPACK_IMPORTED_MODULE_2__["ApolloLink"].from([errorLink, requestHandler, httpLink].filter(function (x) { return !!x; }));
+        var activeResolvers = resolvers;
+        var activeTypeDefs = typeDefs;
+        var activeFragmentMatcher = fragmentMatcher;
+        if (clientState) {
+            if (clientState.defaults) {
+                cache.writeData({
+                    data: clientState.defaults,
+                });
+            }
+            activeResolvers = clientState.resolvers;
+            activeTypeDefs = clientState.typeDefs;
+            activeFragmentMatcher = clientState.fragmentMatcher;
+        }
+        _this = _super.call(this, {
+            cache: cache,
+            link: link,
+            name: name,
+            version: version,
+            resolvers: activeResolvers,
+            typeDefs: activeTypeDefs,
+            fragmentMatcher: activeFragmentMatcher,
+        }) || this;
+        return _this;
+    }
+    return DefaultClient;
+}(apollo_client__WEBPACK_IMPORTED_MODULE_1__["default"]));
+
+/* harmony default export */ __webpack_exports__["default"] = (DefaultClient);
+//# sourceMappingURL=bundle.esm.js.map
+
+
+/***/ }),
+
+/***/ "./node_modules/apollo-cache-inmemory/lib/bundle.esm.js":
+/*!**************************************************************!*\
+  !*** ./node_modules/apollo-cache-inmemory/lib/bundle.esm.js ***!
+  \**************************************************************/
+/*! exports provided: HeuristicFragmentMatcher, InMemoryCache, IntrospectionFragmentMatcher, ObjectCache, StoreReader, StoreWriter, WriteError, assertIdValue, defaultDataIdFromObject, defaultNormalizedCacheFactory, enhanceErrorWithDocument */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "HeuristicFragmentMatcher", function() { return HeuristicFragmentMatcher; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "InMemoryCache", function() { return InMemoryCache; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "IntrospectionFragmentMatcher", function() { return IntrospectionFragmentMatcher; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ObjectCache", function() { return ObjectCache; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "StoreReader", function() { return StoreReader; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "StoreWriter", function() { return StoreWriter; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "WriteError", function() { return WriteError; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "assertIdValue", function() { return assertIdValue; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "defaultDataIdFromObject", function() { return defaultDataIdFromObject; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "defaultNormalizedCacheFactory", function() { return defaultNormalizedCacheFactory$1; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "enhanceErrorWithDocument", function() { return enhanceErrorWithDocument; });
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ "./node_modules/tslib/tslib.es6.js");
+/* harmony import */ var apollo_cache__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! apollo-cache */ "./node_modules/apollo-cache/lib/bundle.esm.js");
+/* harmony import */ var apollo_utilities__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! apollo-utilities */ "./node_modules/apollo-utilities/lib/bundle.esm.js");
+/* harmony import */ var optimism__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! optimism */ "./node_modules/optimism/lib/bundle.esm.js");
+/* harmony import */ var ts_invariant__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ts-invariant */ "./node_modules/apollo-cache-inmemory/node_modules/ts-invariant/lib/invariant.esm.js");
+
+
+
+
+
+
+var haveWarned = false;
+function shouldWarn() {
+    var answer = !haveWarned;
+    if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isTest"])()) {
+        haveWarned = true;
+    }
+    return answer;
+}
+var HeuristicFragmentMatcher = (function () {
+    function HeuristicFragmentMatcher() {
+    }
+    HeuristicFragmentMatcher.prototype.ensureReady = function () {
+        return Promise.resolve();
+    };
+    HeuristicFragmentMatcher.prototype.canBypassInit = function () {
+        return true;
+    };
+    HeuristicFragmentMatcher.prototype.match = function (idValue, typeCondition, context) {
+        var obj = context.store.get(idValue.id);
+        var isRootQuery = idValue.id === 'ROOT_QUERY';
+        if (!obj) {
+            return isRootQuery;
+        }
+        var _a = obj.__typename, __typename = _a === void 0 ? isRootQuery && 'Query' : _a;
+        if (!__typename) {
+            if (shouldWarn()) {
+                 false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn("You're using fragments in your queries, but either don't have the addTypename:\n  true option set in Apollo Client, or you are trying to write a fragment to the store without the __typename.\n   Please turn on the addTypename option and include __typename when writing fragments so that Apollo Client\n   can accurately match fragments.");
+                 false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn('Could not find __typename on Fragment ', typeCondition, obj);
+                 false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn("DEPRECATION WARNING: using fragments without __typename is unsupported behavior " +
+                    "and will be removed in future versions of Apollo client. You should fix this and set addTypename to true now.");
+            }
+            return 'heuristic';
+        }
+        if (__typename === typeCondition) {
+            return true;
+        }
+        if (shouldWarn()) {
+             false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].error('You are using the simple (heuristic) fragment matcher, but your ' +
+                'queries contain union or interface types. Apollo Client will not be ' +
+                'able to accurately map fragments. To make this error go away, use ' +
+                'the `IntrospectionFragmentMatcher` as described in the docs: ' +
+                'https://www.apollographql.com/docs/react/advanced/fragments.html#fragment-matcher');
+        }
+        return 'heuristic';
+    };
+    return HeuristicFragmentMatcher;
+}());
+var IntrospectionFragmentMatcher = (function () {
+    function IntrospectionFragmentMatcher(options) {
