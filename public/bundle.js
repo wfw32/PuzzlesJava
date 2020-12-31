@@ -7492,4 +7492,208 @@ var StoreWriter = (function () {
             var typename = value.__typename;
             storeValue = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["toIdValue"])({ id: valueDataId, typename: typename }, generated);
             storeObject = store.get(dataId);
-            var escapedId = storeObject && storeObject[storeFieldN
+            var escapedId = storeObject && storeObject[storeFieldName];
+            if (escapedId !== storeValue && Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isIdValue"])(escapedId)) {
+                var hadTypename = escapedId.typename !== undefined;
+                var hasTypename = typename !== undefined;
+                var typenameChanged = hadTypename && hasTypename && escapedId.typename !== typename;
+                 false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!generated || escapedId.generated || typenameChanged, "Store error: the application attempted to write an object with no provided id but the store already contains an id of " + escapedId.id + " for this object. The selectionSet that was trying to be written is:\n" + JSON.stringify(field));
+                 false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!hadTypename || hasTypename, "Store error: the application attempted to write an object with no provided typename but the store already contains an object with typename of " + escapedId.typename + " for the object of id " + escapedId.id + ". The selectionSet that was trying to be written is:\n" + JSON.stringify(field));
+                if (escapedId.generated) {
+                    if (typenameChanged) {
+                        if (!generated) {
+                            store.delete(escapedId.id);
+                        }
+                    }
+                    else {
+                        mergeWithGenerated(escapedId.id, storeValue.id, store);
+                    }
+                }
+            }
+        }
+        storeObject = store.get(dataId);
+        if (!storeObject || !Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isEqual"])(storeValue, storeObject[storeFieldName])) {
+            store.set(dataId, Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, storeObject), (_b = {}, _b[storeFieldName] = storeValue, _b)));
+        }
+    };
+    StoreWriter.prototype.processArrayValue = function (value, generatedId, selectionSet, context) {
+        var _this = this;
+        return value.map(function (item, index) {
+            if (item === null) {
+                return null;
+            }
+            var itemDataId = generatedId + "." + index;
+            if (Array.isArray(item)) {
+                return _this.processArrayValue(item, itemDataId, selectionSet, context);
+            }
+            var generated = true;
+            if (context.dataIdFromObject) {
+                var semanticId = context.dataIdFromObject(item);
+                if (semanticId) {
+                    itemDataId = semanticId;
+                    generated = false;
+                }
+            }
+            if (!isDataProcessed(itemDataId, selectionSet, context.processedData)) {
+                _this.writeSelectionSetToStore({
+                    dataId: itemDataId,
+                    result: item,
+                    selectionSet: selectionSet,
+                    context: context,
+                });
+            }
+            return Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["toIdValue"])({ id: itemDataId, typename: item.__typename }, generated);
+        });
+    };
+    return StoreWriter;
+}());
+function isGeneratedId(id) {
+    return id[0] === '$';
+}
+function mergeWithGenerated(generatedKey, realKey, cache) {
+    if (generatedKey === realKey) {
+        return false;
+    }
+    var generated = cache.get(generatedKey);
+    var real = cache.get(realKey);
+    var madeChanges = false;
+    Object.keys(generated).forEach(function (key) {
+        var value = generated[key];
+        var realValue = real[key];
+        if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isIdValue"])(value) &&
+            isGeneratedId(value.id) &&
+            Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isIdValue"])(realValue) &&
+            !Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isEqual"])(value, realValue) &&
+            mergeWithGenerated(value.id, realValue.id, cache)) {
+            madeChanges = true;
+        }
+    });
+    cache.delete(generatedKey);
+    var newRealValue = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, generated), real);
+    if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["isEqual"])(newRealValue, real)) {
+        return madeChanges;
+    }
+    cache.set(realKey, newRealValue);
+    return true;
+}
+function isDataProcessed(dataId, field, processedData) {
+    if (!processedData) {
+        return false;
+    }
+    if (processedData[dataId]) {
+        if (processedData[dataId].indexOf(field) >= 0) {
+            return true;
+        }
+        else {
+            processedData[dataId].push(field);
+        }
+    }
+    else {
+        processedData[dataId] = [field];
+    }
+    return false;
+}
+
+var defaultConfig = {
+    fragmentMatcher: new HeuristicFragmentMatcher(),
+    dataIdFromObject: defaultDataIdFromObject,
+    addTypename: true,
+    resultCaching: true,
+    freezeResults: false,
+};
+function defaultDataIdFromObject(result) {
+    if (result.__typename) {
+        if (result.id !== undefined) {
+            return result.__typename + ":" + result.id;
+        }
+        if (result._id !== undefined) {
+            return result.__typename + ":" + result._id;
+        }
+    }
+    return null;
+}
+var hasOwn$1 = Object.prototype.hasOwnProperty;
+var OptimisticCacheLayer = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(OptimisticCacheLayer, _super);
+    function OptimisticCacheLayer(optimisticId, parent, transaction) {
+        var _this = _super.call(this, Object.create(null)) || this;
+        _this.optimisticId = optimisticId;
+        _this.parent = parent;
+        _this.transaction = transaction;
+        return _this;
+    }
+    OptimisticCacheLayer.prototype.toObject = function () {
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.parent.toObject()), this.data);
+    };
+    OptimisticCacheLayer.prototype.get = function (dataId) {
+        return hasOwn$1.call(this.data, dataId)
+            ? this.data[dataId]
+            : this.parent.get(dataId);
+    };
+    return OptimisticCacheLayer;
+}(ObjectCache));
+var InMemoryCache = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(InMemoryCache, _super);
+    function InMemoryCache(config) {
+        if (config === void 0) { config = {}; }
+        var _this = _super.call(this) || this;
+        _this.watches = new Set();
+        _this.typenameDocumentCache = new Map();
+        _this.cacheKeyRoot = new optimism__WEBPACK_IMPORTED_MODULE_3__["KeyTrie"](apollo_utilities__WEBPACK_IMPORTED_MODULE_2__["canUseWeakMap"]);
+        _this.silenceBroadcast = false;
+        _this.config = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, defaultConfig), config);
+        if (_this.config.customResolvers) {
+             false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn('customResolvers have been renamed to cacheRedirects. Please update your config as we will be deprecating customResolvers in the next major version.');
+            _this.config.cacheRedirects = _this.config.customResolvers;
+        }
+        if (_this.config.cacheResolvers) {
+             false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn('cacheResolvers have been renamed to cacheRedirects. Please update your config as we will be deprecating cacheResolvers in the next major version.');
+            _this.config.cacheRedirects = _this.config.cacheResolvers;
+        }
+        _this.addTypename = !!_this.config.addTypename;
+        _this.data = _this.config.resultCaching
+            ? new DepTrackingCache()
+            : new ObjectCache();
+        _this.optimisticData = _this.data;
+        _this.storeWriter = new StoreWriter();
+        _this.storeReader = new StoreReader({
+            cacheKeyRoot: _this.cacheKeyRoot,
+            freezeResults: config.freezeResults,
+        });
+        var cache = _this;
+        var maybeBroadcastWatch = cache.maybeBroadcastWatch;
+        _this.maybeBroadcastWatch = Object(optimism__WEBPACK_IMPORTED_MODULE_3__["wrap"])(function (c) {
+            return maybeBroadcastWatch.call(_this, c);
+        }, {
+            makeCacheKey: function (c) {
+                if (c.optimistic) {
+                    return;
+                }
+                if (c.previousResult) {
+                    return;
+                }
+                if (cache.data instanceof DepTrackingCache) {
+                    return cache.cacheKeyRoot.lookup(c.query, JSON.stringify(c.variables));
+                }
+            }
+        });
+        return _this;
+    }
+    InMemoryCache.prototype.restore = function (data) {
+        if (data)
+            this.data.replace(data);
+        return this;
+    };
+    InMemoryCache.prototype.extract = function (optimistic) {
+        if (optimistic === void 0) { optimistic = false; }
+        return (optimistic ? this.optimisticData : this.data).toObject();
+    };
+    InMemoryCache.prototype.read = function (options) {
+        if (typeof options.rootId === 'string' &&
+            typeof this.data.get(options.rootId) === 'undefined') {
+            return null;
+        }
+        var fragmentMatcher = this.config.fragmentMatcher;
+        var fragmentMatcherFunction = fragmentMatcher && fragmentMatcher.match;
+        return this.storeReader.readQueryFromStore({
+            store: options.optimistic ? t
