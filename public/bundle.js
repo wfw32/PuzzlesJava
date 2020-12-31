@@ -7927,4 +7927,264 @@ function queryFromPojo(obj) {
         selectionSet: selectionSetFromObj(obj),
     };
     var out = {
-     
+        kind: 'Document',
+        definitions: [op],
+    };
+    return out;
+}
+function fragmentFromPojo(obj, typename) {
+    var frag = {
+        kind: 'FragmentDefinition',
+        typeCondition: {
+            kind: 'NamedType',
+            name: {
+                kind: 'Name',
+                value: typename || '__FakeType',
+            },
+        },
+        name: {
+            kind: 'Name',
+            value: 'GeneratedClientQuery',
+        },
+        selectionSet: selectionSetFromObj(obj),
+    };
+    var out = {
+        kind: 'Document',
+        definitions: [frag],
+    };
+    return out;
+}
+function selectionSetFromObj(obj) {
+    if (typeof obj === 'number' ||
+        typeof obj === 'boolean' ||
+        typeof obj === 'string' ||
+        typeof obj === 'undefined' ||
+        obj === null) {
+        return null;
+    }
+    if (Array.isArray(obj)) {
+        return selectionSetFromObj(obj[0]);
+    }
+    var selections = [];
+    Object.keys(obj).forEach(function (key) {
+        var nestedSelSet = selectionSetFromObj(obj[key]);
+        var field = {
+            kind: 'Field',
+            name: {
+                kind: 'Name',
+                value: key,
+            },
+            selectionSet: nestedSelSet || undefined,
+        };
+        selections.push(field);
+    });
+    var selectionSet = {
+        kind: 'SelectionSet',
+        selections: selections,
+    };
+    return selectionSet;
+}
+var justTypenameQuery = {
+    kind: 'Document',
+    definitions: [
+        {
+            kind: 'OperationDefinition',
+            operation: 'query',
+            name: null,
+            variableDefinitions: null,
+            directives: [],
+            selectionSet: {
+                kind: 'SelectionSet',
+                selections: [
+                    {
+                        kind: 'Field',
+                        alias: null,
+                        name: {
+                            kind: 'Name',
+                            value: '__typename',
+                        },
+                        arguments: [],
+                        directives: [],
+                        selectionSet: null,
+                    },
+                ],
+            },
+        },
+    ],
+};
+
+var ApolloCache = (function () {
+    function ApolloCache() {
+    }
+    ApolloCache.prototype.transformDocument = function (document) {
+        return document;
+    };
+    ApolloCache.prototype.transformForLink = function (document) {
+        return document;
+    };
+    ApolloCache.prototype.readQuery = function (options, optimistic) {
+        if (optimistic === void 0) { optimistic = false; }
+        return this.read({
+            query: options.query,
+            variables: options.variables,
+            optimistic: optimistic,
+        });
+    };
+    ApolloCache.prototype.readFragment = function (options, optimistic) {
+        if (optimistic === void 0) { optimistic = false; }
+        return this.read({
+            query: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_0__["getFragmentQueryDocument"])(options.fragment, options.fragmentName),
+            variables: options.variables,
+            rootId: options.id,
+            optimistic: optimistic,
+        });
+    };
+    ApolloCache.prototype.writeQuery = function (options) {
+        this.write({
+            dataId: 'ROOT_QUERY',
+            result: options.data,
+            query: options.query,
+            variables: options.variables,
+        });
+    };
+    ApolloCache.prototype.writeFragment = function (options) {
+        this.write({
+            dataId: options.id,
+            result: options.data,
+            variables: options.variables,
+            query: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_0__["getFragmentQueryDocument"])(options.fragment, options.fragmentName),
+        });
+    };
+    ApolloCache.prototype.writeData = function (_a) {
+        var id = _a.id, data = _a.data;
+        if (typeof id !== 'undefined') {
+            var typenameResult = null;
+            try {
+                typenameResult = this.read({
+                    rootId: id,
+                    optimistic: false,
+                    query: justTypenameQuery,
+                });
+            }
+            catch (e) {
+            }
+            var __typename = (typenameResult && typenameResult.__typename) || '__ClientData';
+            var dataToWrite = Object.assign({ __typename: __typename }, data);
+            this.writeFragment({
+                id: id,
+                fragment: fragmentFromPojo(dataToWrite, __typename),
+                data: dataToWrite,
+            });
+        }
+        else {
+            this.writeQuery({ query: queryFromPojo(data), data: data });
+        }
+    };
+    return ApolloCache;
+}());
+
+var Cache;
+(function (Cache) {
+})(Cache || (Cache = {}));
+
+
+//# sourceMappingURL=bundle.esm.js.map
+
+
+/***/ }),
+
+/***/ "./node_modules/apollo-client/bundle.esm.js":
+/*!**************************************************!*\
+  !*** ./node_modules/apollo-client/bundle.esm.js ***!
+  \**************************************************/
+/*! exports provided: default, ApolloClient, ApolloError, FetchType, NetworkStatus, ObservableQuery, isApolloError */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ApolloClient", function() { return ApolloClient; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ApolloError", function() { return ApolloError; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FetchType", function() { return FetchType; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "NetworkStatus", function() { return NetworkStatus; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ObservableQuery", function() { return ObservableQuery; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "isApolloError", function() { return isApolloError; });
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ "./node_modules/tslib/tslib.es6.js");
+/* harmony import */ var apollo_utilities__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! apollo-utilities */ "./node_modules/apollo-utilities/lib/bundle.esm.js");
+/* harmony import */ var apollo_link__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! apollo-link */ "./node_modules/apollo-link/lib/bundle.esm.js");
+/* harmony import */ var symbol_observable__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! symbol-observable */ "./node_modules/symbol-observable/es/index.js");
+/* harmony import */ var ts_invariant__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ts-invariant */ "./node_modules/apollo-client/node_modules/ts-invariant/lib/invariant.esm.js");
+/* harmony import */ var graphql_language_visitor__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! graphql/language/visitor */ "./node_modules/graphql/language/visitor.js");
+/* harmony import */ var graphql_language_visitor__WEBPACK_IMPORTED_MODULE_5___default = /*#__PURE__*/__webpack_require__.n(graphql_language_visitor__WEBPACK_IMPORTED_MODULE_5__);
+
+
+
+
+
+
+
+var NetworkStatus;
+(function (NetworkStatus) {
+    NetworkStatus[NetworkStatus["loading"] = 1] = "loading";
+    NetworkStatus[NetworkStatus["setVariables"] = 2] = "setVariables";
+    NetworkStatus[NetworkStatus["fetchMore"] = 3] = "fetchMore";
+    NetworkStatus[NetworkStatus["refetch"] = 4] = "refetch";
+    NetworkStatus[NetworkStatus["poll"] = 6] = "poll";
+    NetworkStatus[NetworkStatus["ready"] = 7] = "ready";
+    NetworkStatus[NetworkStatus["error"] = 8] = "error";
+})(NetworkStatus || (NetworkStatus = {}));
+function isNetworkRequestInFlight(networkStatus) {
+    return networkStatus < 7;
+}
+
+var Observable = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(Observable, _super);
+    function Observable() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    Observable.prototype[symbol_observable__WEBPACK_IMPORTED_MODULE_3__["default"]] = function () {
+        return this;
+    };
+    Observable.prototype['@@observable'] = function () {
+        return this;
+    };
+    return Observable;
+}(apollo_link__WEBPACK_IMPORTED_MODULE_2__["Observable"]));
+
+function isNonEmptyArray(value) {
+    return Array.isArray(value) && value.length > 0;
+}
+
+function isApolloError(err) {
+    return err.hasOwnProperty('graphQLErrors');
+}
+var generateErrorMessage = function (err) {
+    var message = '';
+    if (isNonEmptyArray(err.graphQLErrors)) {
+        err.graphQLErrors.forEach(function (graphQLError) {
+            var errorMessage = graphQLError
+                ? graphQLError.message
+                : 'Error message not found.';
+            message += "GraphQL error: " + errorMessage + "\n";
+        });
+    }
+    if (err.networkError) {
+        message += 'Network error: ' + err.networkError.message + '\n';
+    }
+    message = message.replace(/\n$/, '');
+    return message;
+};
+var ApolloError = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(ApolloError, _super);
+    function ApolloError(_a) {
+        var graphQLErrors = _a.graphQLErrors, networkError = _a.networkError, errorMessage = _a.errorMessage, extraInfo = _a.extraInfo;
+        var _this = _super.call(this, errorMessage) || this;
+        _this.graphQLErrors = graphQLErrors || [];
+        _this.networkError = networkError || null;
+        if (!errorMessage) {
+            _this.message = generateErrorMessage(_this);
+        }
+        else {
+            _this.message = errorMessage;
+        }
+        _this.extraInfo = extraInfo;
+        _this.__proto__ =
