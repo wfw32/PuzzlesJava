@@ -8187,4 +8187,193 @@ var ApolloError = (function (_super) {
             _this.message = errorMessage;
         }
         _this.extraInfo = extraInfo;
-        _this.__proto__ =
+        _this.__proto__ = ApolloError.prototype;
+        return _this;
+    }
+    return ApolloError;
+}(Error));
+
+var FetchType;
+(function (FetchType) {
+    FetchType[FetchType["normal"] = 1] = "normal";
+    FetchType[FetchType["refetch"] = 2] = "refetch";
+    FetchType[FetchType["poll"] = 3] = "poll";
+})(FetchType || (FetchType = {}));
+
+var hasError = function (storeValue, policy) {
+    if (policy === void 0) { policy = 'none'; }
+    return storeValue && (storeValue.networkError ||
+        (policy === 'none' && isNonEmptyArray(storeValue.graphQLErrors)));
+};
+var ObservableQuery = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(ObservableQuery, _super);
+    function ObservableQuery(_a) {
+        var queryManager = _a.queryManager, options = _a.options, _b = _a.shouldSubscribe, shouldSubscribe = _b === void 0 ? true : _b;
+        var _this = _super.call(this, function (observer) {
+            return _this.onSubscribe(observer);
+        }) || this;
+        _this.observers = new Set();
+        _this.subscriptions = new Set();
+        _this.isTornDown = false;
+        _this.options = options;
+        _this.variables = options.variables || {};
+        _this.queryId = queryManager.generateQueryId();
+        _this.shouldSubscribe = shouldSubscribe;
+        var opDef = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["getOperationDefinition"])(options.query);
+        _this.queryName = opDef && opDef.name && opDef.name.value;
+        _this.queryManager = queryManager;
+        return _this;
+    }
+    ObservableQuery.prototype.result = function () {
+        var _this = this;
+        return new Promise(function (resolve, reject) {
+            var observer = {
+                next: function (result) {
+                    resolve(result);
+                    _this.observers.delete(observer);
+                    if (!_this.observers.size) {
+                        _this.queryManager.removeQuery(_this.queryId);
+                    }
+                    setTimeout(function () {
+                        subscription.unsubscribe();
+                    }, 0);
+                },
+                error: reject,
+            };
+            var subscription = _this.subscribe(observer);
+        });
+    };
+    ObservableQuery.prototype.currentResult = function () {
+        var result = this.getCurrentResult();
+        if (result.data === undefined) {
+            result.data = {};
+        }
+        return result;
+    };
+    ObservableQuery.prototype.getCurrentResult = function () {
+        if (this.isTornDown) {
+            var lastResult = this.lastResult;
+            return {
+                data: !this.lastError && lastResult && lastResult.data || void 0,
+                error: this.lastError,
+                loading: false,
+                networkStatus: NetworkStatus.error,
+            };
+        }
+        var _a = this.queryManager.getCurrentQueryResult(this), data = _a.data, partial = _a.partial;
+        var queryStoreValue = this.queryManager.queryStore.get(this.queryId);
+        var result;
+        var fetchPolicy = this.options.fetchPolicy;
+        var isNetworkFetchPolicy = fetchPolicy === 'network-only' ||
+            fetchPolicy === 'no-cache';
+        if (queryStoreValue) {
+            var networkStatus = queryStoreValue.networkStatus;
+            if (hasError(queryStoreValue, this.options.errorPolicy)) {
+                return {
+                    data: void 0,
+                    loading: false,
+                    networkStatus: networkStatus,
+                    error: new ApolloError({
+                        graphQLErrors: queryStoreValue.graphQLErrors,
+                        networkError: queryStoreValue.networkError,
+                    }),
+                };
+            }
+            if (queryStoreValue.variables) {
+                this.options.variables = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.options.variables), queryStoreValue.variables);
+                this.variables = this.options.variables;
+            }
+            result = {
+                data: data,
+                loading: isNetworkRequestInFlight(networkStatus),
+                networkStatus: networkStatus,
+            };
+            if (queryStoreValue.graphQLErrors && this.options.errorPolicy === 'all') {
+                result.errors = queryStoreValue.graphQLErrors;
+            }
+        }
+        else {
+            var loading = isNetworkFetchPolicy ||
+                (partial && fetchPolicy !== 'cache-only');
+            result = {
+                data: data,
+                loading: loading,
+                networkStatus: loading ? NetworkStatus.loading : NetworkStatus.ready,
+            };
+        }
+        if (!partial) {
+            this.updateLastResult(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, result), { stale: false }));
+        }
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, result), { partial: partial });
+    };
+    ObservableQuery.prototype.isDifferentFromLastResult = function (newResult) {
+        var snapshot = this.lastResultSnapshot;
+        return !(snapshot &&
+            newResult &&
+            snapshot.networkStatus === newResult.networkStatus &&
+            snapshot.stale === newResult.stale &&
+            Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isEqual"])(snapshot.data, newResult.data));
+    };
+    ObservableQuery.prototype.getLastResult = function () {
+        return this.lastResult;
+    };
+    ObservableQuery.prototype.getLastError = function () {
+        return this.lastError;
+    };
+    ObservableQuery.prototype.resetLastResults = function () {
+        delete this.lastResult;
+        delete this.lastResultSnapshot;
+        delete this.lastError;
+        this.isTornDown = false;
+    };
+    ObservableQuery.prototype.resetQueryStoreErrors = function () {
+        var queryStore = this.queryManager.queryStore.get(this.queryId);
+        if (queryStore) {
+            queryStore.networkError = null;
+            queryStore.graphQLErrors = [];
+        }
+    };
+    ObservableQuery.prototype.refetch = function (variables) {
+        var fetchPolicy = this.options.fetchPolicy;
+        if (fetchPolicy === 'cache-only') {
+            return Promise.reject( false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]('cache-only fetchPolicy option should not be used together with query refetch.'));
+        }
+        if (fetchPolicy !== 'no-cache' &&
+            fetchPolicy !== 'cache-and-network') {
+            fetchPolicy = 'network-only';
+        }
+        if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isEqual"])(this.variables, variables)) {
+            this.variables = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.variables), variables);
+        }
+        if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isEqual"])(this.options.variables, this.variables)) {
+            this.options.variables = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.options.variables), this.variables);
+        }
+        return this.queryManager.fetchQuery(this.queryId, Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.options), { fetchPolicy: fetchPolicy }), FetchType.refetch);
+    };
+    ObservableQuery.prototype.fetchMore = function (fetchMoreOptions) {
+        var _this = this;
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(fetchMoreOptions.updateQuery, 'updateQuery option is required. This function defines how to update the query data with the new results.');
+        var combinedOptions = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, (fetchMoreOptions.query ? fetchMoreOptions : Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.options), fetchMoreOptions), { variables: Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.variables), fetchMoreOptions.variables) }))), { fetchPolicy: 'network-only' });
+        var qid = this.queryManager.generateQueryId();
+        return this.queryManager
+            .fetchQuery(qid, combinedOptions, FetchType.normal, this.queryId)
+            .then(function (fetchMoreResult) {
+            _this.updateQuery(function (previousResult) {
+                return fetchMoreOptions.updateQuery(previousResult, {
+                    fetchMoreResult: fetchMoreResult.data,
+                    variables: combinedOptions.variables,
+                });
+            });
+            _this.queryManager.stopQuery(qid);
+            return fetchMoreResult;
+        }, function (error) {
+            _this.queryManager.stopQuery(qid);
+            throw error;
+        });
+    };
+    ObservableQuery.prototype.subscribeToMore = function (options) {
+        var _this = this;
+        var subscription = this.queryManager
+            .startGraphQLSubscription({
+            query: options.document,
+            variables: o
