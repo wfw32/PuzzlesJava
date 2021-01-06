@@ -8584,4 +8584,214 @@ var MutationStore = (function () {
     MutationStore.prototype.markMutationResult = function (mutationId) {
         var mutation = this.store[mutationId];
         if (mutation) {
-            mutation.loading
+            mutation.loading = false;
+            mutation.error = null;
+        }
+    };
+    MutationStore.prototype.reset = function () {
+        this.store = {};
+    };
+    return MutationStore;
+}());
+
+var QueryStore = (function () {
+    function QueryStore() {
+        this.store = {};
+    }
+    QueryStore.prototype.getStore = function () {
+        return this.store;
+    };
+    QueryStore.prototype.get = function (queryId) {
+        return this.store[queryId];
+    };
+    QueryStore.prototype.initQuery = function (query) {
+        var previousQuery = this.store[query.queryId];
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!previousQuery ||
+            previousQuery.document === query.document ||
+            Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isEqual"])(previousQuery.document, query.document), 'Internal Error: may not update existing query string in store');
+        var isSetVariables = false;
+        var previousVariables = null;
+        if (query.storePreviousVariables &&
+            previousQuery &&
+            previousQuery.networkStatus !== NetworkStatus.loading) {
+            if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isEqual"])(previousQuery.variables, query.variables)) {
+                isSetVariables = true;
+                previousVariables = previousQuery.variables;
+            }
+        }
+        var networkStatus;
+        if (isSetVariables) {
+            networkStatus = NetworkStatus.setVariables;
+        }
+        else if (query.isPoll) {
+            networkStatus = NetworkStatus.poll;
+        }
+        else if (query.isRefetch) {
+            networkStatus = NetworkStatus.refetch;
+        }
+        else {
+            networkStatus = NetworkStatus.loading;
+        }
+        var graphQLErrors = [];
+        if (previousQuery && previousQuery.graphQLErrors) {
+            graphQLErrors = previousQuery.graphQLErrors;
+        }
+        this.store[query.queryId] = {
+            document: query.document,
+            variables: query.variables,
+            previousVariables: previousVariables,
+            networkError: null,
+            graphQLErrors: graphQLErrors,
+            networkStatus: networkStatus,
+            metadata: query.metadata,
+        };
+        if (typeof query.fetchMoreForQueryId === 'string' &&
+            this.store[query.fetchMoreForQueryId]) {
+            this.store[query.fetchMoreForQueryId].networkStatus =
+                NetworkStatus.fetchMore;
+        }
+    };
+    QueryStore.prototype.markQueryResult = function (queryId, result, fetchMoreForQueryId) {
+        if (!this.store || !this.store[queryId])
+            return;
+        this.store[queryId].networkError = null;
+        this.store[queryId].graphQLErrors = isNonEmptyArray(result.errors) ? result.errors : [];
+        this.store[queryId].previousVariables = null;
+        this.store[queryId].networkStatus = NetworkStatus.ready;
+        if (typeof fetchMoreForQueryId === 'string' &&
+            this.store[fetchMoreForQueryId]) {
+            this.store[fetchMoreForQueryId].networkStatus = NetworkStatus.ready;
+        }
+    };
+    QueryStore.prototype.markQueryError = function (queryId, error, fetchMoreForQueryId) {
+        if (!this.store || !this.store[queryId])
+            return;
+        this.store[queryId].networkError = error;
+        this.store[queryId].networkStatus = NetworkStatus.error;
+        if (typeof fetchMoreForQueryId === 'string') {
+            this.markQueryResultClient(fetchMoreForQueryId, true);
+        }
+    };
+    QueryStore.prototype.markQueryResultClient = function (queryId, complete) {
+        var storeValue = this.store && this.store[queryId];
+        if (storeValue) {
+            storeValue.networkError = null;
+            storeValue.previousVariables = null;
+            if (complete) {
+                storeValue.networkStatus = NetworkStatus.ready;
+            }
+        }
+    };
+    QueryStore.prototype.stopQuery = function (queryId) {
+        delete this.store[queryId];
+    };
+    QueryStore.prototype.reset = function (observableQueryIds) {
+        var _this = this;
+        Object.keys(this.store).forEach(function (queryId) {
+            if (observableQueryIds.indexOf(queryId) < 0) {
+                _this.stopQuery(queryId);
+            }
+            else {
+                _this.store[queryId].networkStatus = NetworkStatus.loading;
+            }
+        });
+    };
+    return QueryStore;
+}());
+
+function capitalizeFirstLetter(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+var LocalState = (function () {
+    function LocalState(_a) {
+        var cache = _a.cache, client = _a.client, resolvers = _a.resolvers, fragmentMatcher = _a.fragmentMatcher;
+        this.cache = cache;
+        if (client) {
+            this.client = client;
+        }
+        if (resolvers) {
+            this.addResolvers(resolvers);
+        }
+        if (fragmentMatcher) {
+            this.setFragmentMatcher(fragmentMatcher);
+        }
+    }
+    LocalState.prototype.addResolvers = function (resolvers) {
+        var _this = this;
+        this.resolvers = this.resolvers || {};
+        if (Array.isArray(resolvers)) {
+            resolvers.forEach(function (resolverGroup) {
+                _this.resolvers = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["mergeDeep"])(_this.resolvers, resolverGroup);
+            });
+        }
+        else {
+            this.resolvers = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["mergeDeep"])(this.resolvers, resolvers);
+        }
+    };
+    LocalState.prototype.setResolvers = function (resolvers) {
+        this.resolvers = {};
+        this.addResolvers(resolvers);
+    };
+    LocalState.prototype.getResolvers = function () {
+        return this.resolvers || {};
+    };
+    LocalState.prototype.runResolvers = function (_a) {
+        var document = _a.document, remoteResult = _a.remoteResult, context = _a.context, variables = _a.variables, _b = _a.onlyRunForcedResolvers, onlyRunForcedResolvers = _b === void 0 ? false : _b;
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_c) {
+                if (document) {
+                    return [2, this.resolveDocument(document, remoteResult.data, context, variables, this.fragmentMatcher, onlyRunForcedResolvers).then(function (localResult) { return (Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, remoteResult), { data: localResult.result })); })];
+                }
+                return [2, remoteResult];
+            });
+        });
+    };
+    LocalState.prototype.setFragmentMatcher = function (fragmentMatcher) {
+        this.fragmentMatcher = fragmentMatcher;
+    };
+    LocalState.prototype.getFragmentMatcher = function () {
+        return this.fragmentMatcher;
+    };
+    LocalState.prototype.clientQuery = function (document) {
+        if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["hasDirectives"])(['client'], document)) {
+            if (this.resolvers) {
+                return document;
+            }
+             false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn('Found @client directives in a query but no ApolloClient resolvers ' +
+                'were specified. This means ApolloClient local resolver handling ' +
+                'has been disabled, and @client directives will be passed through ' +
+                'to your link chain.');
+        }
+        return null;
+    };
+    LocalState.prototype.serverQuery = function (document) {
+        return this.resolvers ? Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["removeClientSetsFromDocument"])(document) : document;
+    };
+    LocalState.prototype.prepareContext = function (context) {
+        if (context === void 0) { context = {}; }
+        var cache = this.cache;
+        var newContext = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, context), { cache: cache, getCacheKey: function (obj) {
+                if (cache.config) {
+                    return cache.config.dataIdFromObject(obj);
+                }
+                else {
+                     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(false, 'To use context.getCacheKey, you need to use a cache that has ' +
+                        'a configurable dataIdFromObject, like apollo-cache-inmemory.');
+                }
+            } });
+        return newContext;
+    };
+    LocalState.prototype.addExportedVariables = function (document, variables, context) {
+        if (variables === void 0) { variables = {}; }
+        if (context === void 0) { context = {}; }
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_a) {
+                if (document) {
+                    return [2, this.resolveDocument(document, this.buildRootValueFromCache(document, variables) || {}, this.prepareContext(context), variables).then(function (data) { return (Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, variables), data.exportedVariables)); })];
+                }
+                return [2, Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, variables)];
+            });
+        });
+    };
+    LocalState.prototype.shouldForceResolvers = function (doc
