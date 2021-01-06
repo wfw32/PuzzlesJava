@@ -8794,4 +8794,157 @@ var LocalState = (function () {
             });
         });
     };
-    LocalState.prototype.shouldForceResolvers = function (doc
+    LocalState.prototype.shouldForceResolvers = function (document) {
+        var forceResolvers = false;
+        Object(graphql_language_visitor__WEBPACK_IMPORTED_MODULE_5__["visit"])(document, {
+            Directive: {
+                enter: function (node) {
+                    if (node.name.value === 'client' && node.arguments) {
+                        forceResolvers = node.arguments.some(function (arg) {
+                            return arg.name.value === 'always' &&
+                                arg.value.kind === 'BooleanValue' &&
+                                arg.value.value === true;
+                        });
+                        if (forceResolvers) {
+                            return graphql_language_visitor__WEBPACK_IMPORTED_MODULE_5__["BREAK"];
+                        }
+                    }
+                },
+            },
+        });
+        return forceResolvers;
+    };
+    LocalState.prototype.buildRootValueFromCache = function (document, variables) {
+        return this.cache.diff({
+            query: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["buildQueryFromSelectionSet"])(document),
+            variables: variables,
+            returnPartialData: true,
+            optimistic: false,
+        }).result;
+    };
+    LocalState.prototype.resolveDocument = function (document, rootValue, context, variables, fragmentMatcher, onlyRunForcedResolvers) {
+        if (context === void 0) { context = {}; }
+        if (variables === void 0) { variables = {}; }
+        if (fragmentMatcher === void 0) { fragmentMatcher = function () { return true; }; }
+        if (onlyRunForcedResolvers === void 0) { onlyRunForcedResolvers = false; }
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            var mainDefinition, fragments, fragmentMap, definitionOperation, defaultOperationType, _a, cache, client, execContext;
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_b) {
+                mainDefinition = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["getMainDefinition"])(document);
+                fragments = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["getFragmentDefinitions"])(document);
+                fragmentMap = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["createFragmentMap"])(fragments);
+                definitionOperation = mainDefinition
+                    .operation;
+                defaultOperationType = definitionOperation
+                    ? capitalizeFirstLetter(definitionOperation)
+                    : 'Query';
+                _a = this, cache = _a.cache, client = _a.client;
+                execContext = {
+                    fragmentMap: fragmentMap,
+                    context: Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, context), { cache: cache,
+                        client: client }),
+                    variables: variables,
+                    fragmentMatcher: fragmentMatcher,
+                    defaultOperationType: defaultOperationType,
+                    exportedVariables: {},
+                    onlyRunForcedResolvers: onlyRunForcedResolvers,
+                };
+                return [2, this.resolveSelectionSet(mainDefinition.selectionSet, rootValue, execContext).then(function (result) { return ({
+                        result: result,
+                        exportedVariables: execContext.exportedVariables,
+                    }); })];
+            });
+        });
+    };
+    LocalState.prototype.resolveSelectionSet = function (selectionSet, rootValue, execContext) {
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            var fragmentMap, context, variables, resultsToMerge, execute;
+            var _this = this;
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_a) {
+                fragmentMap = execContext.fragmentMap, context = execContext.context, variables = execContext.variables;
+                resultsToMerge = [rootValue];
+                execute = function (selection) { return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(_this, void 0, void 0, function () {
+                    var fragment, typeCondition;
+                    return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_a) {
+                        if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["shouldInclude"])(selection, variables)) {
+                            return [2];
+                        }
+                        if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isField"])(selection)) {
+                            return [2, this.resolveField(selection, rootValue, execContext).then(function (fieldResult) {
+                                    var _a;
+                                    if (typeof fieldResult !== 'undefined') {
+                                        resultsToMerge.push((_a = {},
+                                            _a[Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["resultKeyNameFromField"])(selection)] = fieldResult,
+                                            _a));
+                                    }
+                                })];
+                        }
+                        if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["isInlineFragment"])(selection)) {
+                            fragment = selection;
+                        }
+                        else {
+                            fragment = fragmentMap[selection.name.value];
+                             false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(fragment, "No fragment named " + selection.name.value);
+                        }
+                        if (fragment && fragment.typeCondition) {
+                            typeCondition = fragment.typeCondition.name.value;
+                            if (execContext.fragmentMatcher(rootValue, typeCondition, context)) {
+                                return [2, this.resolveSelectionSet(fragment.selectionSet, rootValue, execContext).then(function (fragmentResult) {
+                                        resultsToMerge.push(fragmentResult);
+                                    })];
+                            }
+                        }
+                        return [2];
+                    });
+                }); };
+                return [2, Promise.all(selectionSet.selections.map(execute)).then(function () {
+                        return Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["mergeDeepArray"])(resultsToMerge);
+                    })];
+            });
+        });
+    };
+    LocalState.prototype.resolveField = function (field, rootValue, execContext) {
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            var variables, fieldName, aliasedFieldName, aliasUsed, defaultResult, resultPromise, resolverType, resolverMap, resolve;
+            var _this = this;
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_a) {
+                variables = execContext.variables;
+                fieldName = field.name.value;
+                aliasedFieldName = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["resultKeyNameFromField"])(field);
+                aliasUsed = fieldName !== aliasedFieldName;
+                defaultResult = rootValue[aliasedFieldName] || rootValue[fieldName];
+                resultPromise = Promise.resolve(defaultResult);
+                if (!execContext.onlyRunForcedResolvers ||
+                    this.shouldForceResolvers(field)) {
+                    resolverType = rootValue.__typename || execContext.defaultOperationType;
+                    resolverMap = this.resolvers && this.resolvers[resolverType];
+                    if (resolverMap) {
+                        resolve = resolverMap[aliasUsed ? fieldName : aliasedFieldName];
+                        if (resolve) {
+                            resultPromise = Promise.resolve(resolve(rootValue, Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["argumentsObjectFromField"])(field, variables), execContext.context, { field: field, fragmentMap: execContext.fragmentMap }));
+                        }
+                    }
+                }
+                return [2, resultPromise.then(function (result) {
+                        if (result === void 0) { result = defaultResult; }
+                        if (field.directives) {
+                            field.directives.forEach(function (directive) {
+                                if (directive.name.value === 'export' && directive.arguments) {
+                                    directive.arguments.forEach(function (arg) {
+                                        if (arg.name.value === 'as' && arg.value.kind === 'StringValue') {
+                                            execContext.exportedVariables[arg.value.value] = result;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                        if (!field.selectionSet) {
+                            return result;
+                        }
+                        if (result == null) {
+                            return result;
+                        }
+                        if (Array.isArray(result)) {
+                            return _this.resolveSubSelectedArray(field, result, execContext);
+                        }
+                  
