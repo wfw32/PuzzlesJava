@@ -8947,4 +8947,179 @@ var LocalState = (function () {
                         if (Array.isArray(result)) {
                             return _this.resolveSubSelectedArray(field, result, execContext);
                         }
-                  
+                        if (field.selectionSet) {
+                            return _this.resolveSelectionSet(field.selectionSet, result, execContext);
+                        }
+                    })];
+            });
+        });
+    };
+    LocalState.prototype.resolveSubSelectedArray = function (field, result, execContext) {
+        var _this = this;
+        return Promise.all(result.map(function (item) {
+            if (item === null) {
+                return null;
+            }
+            if (Array.isArray(item)) {
+                return _this.resolveSubSelectedArray(field, item, execContext);
+            }
+            if (field.selectionSet) {
+                return _this.resolveSelectionSet(field.selectionSet, item, execContext);
+            }
+        }));
+    };
+    return LocalState;
+}());
+
+function multiplex(inner) {
+    var observers = new Set();
+    var sub = null;
+    return new Observable(function (observer) {
+        observers.add(observer);
+        sub = sub || inner.subscribe({
+            next: function (value) {
+                observers.forEach(function (obs) { return obs.next && obs.next(value); });
+            },
+            error: function (error) {
+                observers.forEach(function (obs) { return obs.error && obs.error(error); });
+            },
+            complete: function () {
+                observers.forEach(function (obs) { return obs.complete && obs.complete(); });
+            },
+        });
+        return function () {
+            if (observers.delete(observer) && !observers.size && sub) {
+                sub.unsubscribe();
+                sub = null;
+            }
+        };
+    });
+}
+function asyncMap(observable, mapFn) {
+    return new Observable(function (observer) {
+        var next = observer.next, error = observer.error, complete = observer.complete;
+        var activeNextCount = 0;
+        var completed = false;
+        var handler = {
+            next: function (value) {
+                ++activeNextCount;
+                new Promise(function (resolve) {
+                    resolve(mapFn(value));
+                }).then(function (result) {
+                    --activeNextCount;
+                    next && next.call(observer, result);
+                    completed && handler.complete();
+                }, function (e) {
+                    --activeNextCount;
+                    error && error.call(observer, e);
+                });
+            },
+            error: function (e) {
+                error && error.call(observer, e);
+            },
+            complete: function () {
+                completed = true;
+                if (!activeNextCount) {
+                    complete && complete.call(observer);
+                }
+            },
+        };
+        var sub = observable.subscribe(handler);
+        return function () { return sub.unsubscribe(); };
+    });
+}
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+var QueryManager = (function () {
+    function QueryManager(_a) {
+        var link = _a.link, _b = _a.queryDeduplication, queryDeduplication = _b === void 0 ? false : _b, store = _a.store, _c = _a.onBroadcast, onBroadcast = _c === void 0 ? function () { return undefined; } : _c, _d = _a.ssrMode, ssrMode = _d === void 0 ? false : _d, _e = _a.clientAwareness, clientAwareness = _e === void 0 ? {} : _e, localState = _a.localState, assumeImmutableResults = _a.assumeImmutableResults;
+        this.mutationStore = new MutationStore();
+        this.queryStore = new QueryStore();
+        this.clientAwareness = {};
+        this.idCounter = 1;
+        this.queries = new Map();
+        this.fetchQueryRejectFns = new Map();
+        this.transformCache = new (apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["canUseWeakMap"] ? WeakMap : Map)();
+        this.inFlightLinkObservables = new Map();
+        this.pollingInfoByQueryId = new Map();
+        this.link = link;
+        this.queryDeduplication = queryDeduplication;
+        this.dataStore = store;
+        this.onBroadcast = onBroadcast;
+        this.clientAwareness = clientAwareness;
+        this.localState = localState || new LocalState({ cache: store.getCache() });
+        this.ssrMode = ssrMode;
+        this.assumeImmutableResults = !!assumeImmutableResults;
+    }
+    QueryManager.prototype.stop = function () {
+        var _this = this;
+        this.queries.forEach(function (_info, queryId) {
+            _this.stopQueryNoBroadcast(queryId);
+        });
+        this.fetchQueryRejectFns.forEach(function (reject) {
+            reject( false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]('QueryManager stopped while query was in flight'));
+        });
+    };
+    QueryManager.prototype.mutate = function (_a) {
+        var mutation = _a.mutation, variables = _a.variables, optimisticResponse = _a.optimisticResponse, updateQueriesByName = _a.updateQueries, _b = _a.refetchQueries, refetchQueries = _b === void 0 ? [] : _b, _c = _a.awaitRefetchQueries, awaitRefetchQueries = _c === void 0 ? false : _c, updateWithProxyFn = _a.update, _d = _a.errorPolicy, errorPolicy = _d === void 0 ? 'none' : _d, fetchPolicy = _a.fetchPolicy, _e = _a.context, context = _e === void 0 ? {} : _e;
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            var mutationId, generateUpdateQueriesInfo, self;
+            var _this = this;
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_f) {
+                switch (_f.label) {
+                    case 0:
+                         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(mutation, 'mutation option is required. You must specify your GraphQL document in the mutation option.');
+                         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!fetchPolicy || fetchPolicy === 'no-cache', "Mutations only support a 'no-cache' fetchPolicy. If you don't want to disable the cache, remove your fetchPolicy setting to proceed with the default mutation behavior.");
+                        mutationId = this.generateQueryId();
+                        mutation = this.transform(mutation).document;
+                        this.setQuery(mutationId, function () { return ({ document: mutation }); });
+                        variables = this.getVariables(mutation, variables);
+                        if (!this.transform(mutation).hasClientExports) return [3, 2];
+                        return [4, this.localState.addExportedVariables(mutation, variables, context)];
+                    case 1:
+                        variables = _f.sent();
+                        _f.label = 2;
+                    case 2:
+                        generateUpdateQueriesInfo = function () {
+                            var ret = {};
+                            if (updateQueriesByName) {
+                                _this.queries.forEach(function (_a, queryId) {
+                                    var observableQuery = _a.observableQuery;
+                                    if (observableQuery) {
+                                        var queryName = observableQuery.queryName;
+                                        if (queryName &&
+                                            hasOwnProperty.call(updateQueriesByName, queryName)) {
+                                            ret[queryId] = {
+                                                updater: updateQueriesByName[queryName],
+                                                query: _this.queryStore.get(queryId),
+                                            };
+                                        }
+                                    }
+                                });
+                            }
+                            return ret;
+                        };
+                        this.mutationStore.initMutation(mutationId, mutation, variables);
+                        this.dataStore.markMutationInit({
+                            mutationId: mutationId,
+                            document: mutation,
+                            variables: variables,
+                            updateQueries: generateUpdateQueriesInfo(),
+                            update: updateWithProxyFn,
+                            optimisticResponse: optimisticResponse,
+                        });
+                        this.broadcastQueries();
+                        self = this;
+                        return [2, new Promise(function (resolve, reject) {
+                                var storeResult;
+                                var error;
+                                self.getObservableFromLink(mutation, Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, context), { optimisticResponse: optimisticResponse }), variables, false).subscribe({
+                                    next: function (result) {
+                                        if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(result) && errorPolicy === 'none') {
+                                            error = new ApolloError({
+                                                graphQLErrors: result.errors,
+                                            });
+                                            return;
+                                        }
+                                        self.mutationStore.markMutationResult(mutationId);
+                                        if (fetchPolicy !== 'no-cache'
