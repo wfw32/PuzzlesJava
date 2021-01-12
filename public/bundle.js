@@ -9122,4 +9122,152 @@ var QueryManager = (function () {
                                             return;
                                         }
                                         self.mutationStore.markMutationResult(mutationId);
-                                        if (fetchPolicy !== 'no-cache'
+                                        if (fetchPolicy !== 'no-cache') {
+                                            self.dataStore.markMutationResult({
+                                                mutationId: mutationId,
+                                                result: result,
+                                                document: mutation,
+                                                variables: variables,
+                                                updateQueries: generateUpdateQueriesInfo(),
+                                                update: updateWithProxyFn,
+                                            });
+                                        }
+                                        storeResult = result;
+                                    },
+                                    error: function (err) {
+                                        self.mutationStore.markMutationError(mutationId, err);
+                                        self.dataStore.markMutationComplete({
+                                            mutationId: mutationId,
+                                            optimisticResponse: optimisticResponse,
+                                        });
+                                        self.broadcastQueries();
+                                        self.setQuery(mutationId, function () { return ({ document: null }); });
+                                        reject(new ApolloError({
+                                            networkError: err,
+                                        }));
+                                    },
+                                    complete: function () {
+                                        if (error) {
+                                            self.mutationStore.markMutationError(mutationId, error);
+                                        }
+                                        self.dataStore.markMutationComplete({
+                                            mutationId: mutationId,
+                                            optimisticResponse: optimisticResponse,
+                                        });
+                                        self.broadcastQueries();
+                                        if (error) {
+                                            reject(error);
+                                            return;
+                                        }
+                                        if (typeof refetchQueries === 'function') {
+                                            refetchQueries = refetchQueries(storeResult);
+                                        }
+                                        var refetchQueryPromises = [];
+                                        if (isNonEmptyArray(refetchQueries)) {
+                                            refetchQueries.forEach(function (refetchQuery) {
+                                                if (typeof refetchQuery === 'string') {
+                                                    self.queries.forEach(function (_a) {
+                                                        var observableQuery = _a.observableQuery;
+                                                        if (observableQuery &&
+                                                            observableQuery.queryName === refetchQuery) {
+                                                            refetchQueryPromises.push(observableQuery.refetch());
+                                                        }
+                                                    });
+                                                }
+                                                else {
+                                                    var queryOptions = {
+                                                        query: refetchQuery.query,
+                                                        variables: refetchQuery.variables,
+                                                        fetchPolicy: 'network-only',
+                                                    };
+                                                    if (refetchQuery.context) {
+                                                        queryOptions.context = refetchQuery.context;
+                                                    }
+                                                    refetchQueryPromises.push(self.query(queryOptions));
+                                                }
+                                            });
+                                        }
+                                        Promise.all(awaitRefetchQueries ? refetchQueryPromises : []).then(function () {
+                                            self.setQuery(mutationId, function () { return ({ document: null }); });
+                                            if (errorPolicy === 'ignore' &&
+                                                storeResult &&
+                                                Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(storeResult)) {
+                                                delete storeResult.errors;
+                                            }
+                                            resolve(storeResult);
+                                        });
+                                    },
+                                });
+                            })];
+                }
+            });
+        });
+    };
+    QueryManager.prototype.fetchQuery = function (queryId, options, fetchType, fetchMoreForQueryId) {
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__awaiter"])(this, void 0, void 0, function () {
+            var _a, metadata, _b, fetchPolicy, _c, context, query, variables, storeResult, isNetworkOnly, needToFetch, _d, complete, result, shouldFetch, requestId, cancel, networkResult;
+            var _this = this;
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__generator"])(this, function (_e) {
+                switch (_e.label) {
+                    case 0:
+                        _a = options.metadata, metadata = _a === void 0 ? null : _a, _b = options.fetchPolicy, fetchPolicy = _b === void 0 ? 'cache-first' : _b, _c = options.context, context = _c === void 0 ? {} : _c;
+                        query = this.transform(options.query).document;
+                        variables = this.getVariables(query, options.variables);
+                        if (!this.transform(query).hasClientExports) return [3, 2];
+                        return [4, this.localState.addExportedVariables(query, variables, context)];
+                    case 1:
+                        variables = _e.sent();
+                        _e.label = 2;
+                    case 2:
+                        options = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, options), { variables: variables });
+                        isNetworkOnly = fetchPolicy === 'network-only' || fetchPolicy === 'no-cache';
+                        needToFetch = isNetworkOnly;
+                        if (!isNetworkOnly) {
+                            _d = this.dataStore.getCache().diff({
+                                query: query,
+                                variables: variables,
+                                returnPartialData: true,
+                                optimistic: false,
+                            }), complete = _d.complete, result = _d.result;
+                            needToFetch = !complete || fetchPolicy === 'cache-and-network';
+                            storeResult = result;
+                        }
+                        shouldFetch = needToFetch && fetchPolicy !== 'cache-only' && fetchPolicy !== 'standby';
+                        if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["hasDirectives"])(['live'], query))
+                            shouldFetch = true;
+                        requestId = this.idCounter++;
+                        cancel = fetchPolicy !== 'no-cache'
+                            ? this.updateQueryWatch(queryId, query, options)
+                            : undefined;
+                        this.setQuery(queryId, function () { return ({
+                            document: query,
+                            lastRequestId: requestId,
+                            invalidated: true,
+                            cancel: cancel,
+                        }); });
+                        this.invalidate(fetchMoreForQueryId);
+                        this.queryStore.initQuery({
+                            queryId: queryId,
+                            document: query,
+                            storePreviousVariables: shouldFetch,
+                            variables: variables,
+                            isPoll: fetchType === FetchType.poll,
+                            isRefetch: fetchType === FetchType.refetch,
+                            metadata: metadata,
+                            fetchMoreForQueryId: fetchMoreForQueryId,
+                        });
+                        this.broadcastQueries();
+                        if (shouldFetch) {
+                            networkResult = this.fetchRequest({
+                                requestId: requestId,
+                                queryId: queryId,
+                                document: query,
+                                options: options,
+                                fetchMoreForQueryId: fetchMoreForQueryId,
+                            }).catch(function (error) {
+                                if (isApolloError(error)) {
+                                    throw error;
+                                }
+                                else {
+                                    if (requestId >= _this.getQuery(queryId).lastRequestId) {
+                                        _this.queryStore.markQueryError(query
