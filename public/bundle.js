@@ -9270,4 +9270,194 @@ var QueryManager = (function () {
                                 }
                                 else {
                                     if (requestId >= _this.getQuery(queryId).lastRequestId) {
-                                        _this.queryStore.markQueryError(query
+                                        _this.queryStore.markQueryError(queryId, error, fetchMoreForQueryId);
+                                        _this.invalidate(queryId);
+                                        _this.invalidate(fetchMoreForQueryId);
+                                        _this.broadcastQueries();
+                                    }
+                                    throw new ApolloError({ networkError: error });
+                                }
+                            });
+                            if (fetchPolicy !== 'cache-and-network') {
+                                return [2, networkResult];
+                            }
+                            networkResult.catch(function () { });
+                        }
+                        this.queryStore.markQueryResultClient(queryId, !shouldFetch);
+                        this.invalidate(queryId);
+                        this.invalidate(fetchMoreForQueryId);
+                        if (this.transform(query).hasForcedResolvers) {
+                            return [2, this.localState.runResolvers({
+                                    document: query,
+                                    remoteResult: { data: storeResult },
+                                    context: context,
+                                    variables: variables,
+                                    onlyRunForcedResolvers: true,
+                                }).then(function (result) {
+                                    _this.markQueryResult(queryId, result, options, fetchMoreForQueryId);
+                                    _this.broadcastQueries();
+                                    return result;
+                                })];
+                        }
+                        this.broadcastQueries();
+                        return [2, { data: storeResult }];
+                }
+            });
+        });
+    };
+    QueryManager.prototype.markQueryResult = function (queryId, result, _a, fetchMoreForQueryId) {
+        var fetchPolicy = _a.fetchPolicy, variables = _a.variables, errorPolicy = _a.errorPolicy;
+        if (fetchPolicy === 'no-cache') {
+            this.setQuery(queryId, function () { return ({
+                newData: { result: result.data, complete: true },
+            }); });
+        }
+        else {
+            this.dataStore.markQueryResult(result, this.getQuery(queryId).document, variables, fetchMoreForQueryId, errorPolicy === 'ignore' || errorPolicy === 'all');
+        }
+    };
+    QueryManager.prototype.queryListenerForObserver = function (queryId, options, observer) {
+        var _this = this;
+        function invoke(method, argument) {
+            if (observer[method]) {
+                try {
+                    observer[method](argument);
+                }
+                catch (e) {
+                     false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].error(e);
+                }
+            }
+            else if (method === 'error') {
+                 false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].error(argument);
+            }
+        }
+        return function (queryStoreValue, newData) {
+            _this.invalidate(queryId, false);
+            if (!queryStoreValue)
+                return;
+            var _a = _this.getQuery(queryId), observableQuery = _a.observableQuery, document = _a.document;
+            var fetchPolicy = observableQuery
+                ? observableQuery.options.fetchPolicy
+                : options.fetchPolicy;
+            if (fetchPolicy === 'standby')
+                return;
+            var loading = isNetworkRequestInFlight(queryStoreValue.networkStatus);
+            var lastResult = observableQuery && observableQuery.getLastResult();
+            var networkStatusChanged = !!(lastResult &&
+                lastResult.networkStatus !== queryStoreValue.networkStatus);
+            var shouldNotifyIfLoading = options.returnPartialData ||
+                (!newData && queryStoreValue.previousVariables) ||
+                (networkStatusChanged && options.notifyOnNetworkStatusChange) ||
+                fetchPolicy === 'cache-only' ||
+                fetchPolicy === 'cache-and-network';
+            if (loading && !shouldNotifyIfLoading) {
+                return;
+            }
+            var hasGraphQLErrors = isNonEmptyArray(queryStoreValue.graphQLErrors);
+            var errorPolicy = observableQuery
+                && observableQuery.options.errorPolicy
+                || options.errorPolicy
+                || 'none';
+            if (errorPolicy === 'none' && hasGraphQLErrors || queryStoreValue.networkError) {
+                return invoke('error', new ApolloError({
+                    graphQLErrors: queryStoreValue.graphQLErrors,
+                    networkError: queryStoreValue.networkError,
+                }));
+            }
+            try {
+                var data = void 0;
+                var isMissing = void 0;
+                if (newData) {
+                    if (fetchPolicy !== 'no-cache' && fetchPolicy !== 'network-only') {
+                        _this.setQuery(queryId, function () { return ({ newData: null }); });
+                    }
+                    data = newData.result;
+                    isMissing = !newData.complete;
+                }
+                else {
+                    var lastError = observableQuery && observableQuery.getLastError();
+                    var errorStatusChanged = errorPolicy !== 'none' &&
+                        (lastError && lastError.graphQLErrors) !==
+                            queryStoreValue.graphQLErrors;
+                    if (lastResult && lastResult.data && !errorStatusChanged) {
+                        data = lastResult.data;
+                        isMissing = false;
+                    }
+                    else {
+                        var diffResult = _this.dataStore.getCache().diff({
+                            query: document,
+                            variables: queryStoreValue.previousVariables ||
+                                queryStoreValue.variables,
+                            returnPartialData: true,
+                            optimistic: true,
+                        });
+                        data = diffResult.result;
+                        isMissing = !diffResult.complete;
+                    }
+                }
+                var stale = isMissing && !(options.returnPartialData ||
+                    fetchPolicy === 'cache-only');
+                var resultFromStore = {
+                    data: stale ? lastResult && lastResult.data : data,
+                    loading: loading,
+                    networkStatus: queryStoreValue.networkStatus,
+                    stale: stale,
+                };
+                if (errorPolicy === 'all' && hasGraphQLErrors) {
+                    resultFromStore.errors = queryStoreValue.graphQLErrors;
+                }
+                invoke('next', resultFromStore);
+            }
+            catch (networkError) {
+                invoke('error', new ApolloError({ networkError: networkError }));
+            }
+        };
+    };
+    QueryManager.prototype.transform = function (document) {
+        var transformCache = this.transformCache;
+        if (!transformCache.has(document)) {
+            var cache = this.dataStore.getCache();
+            var transformed = cache.transformDocument(document);
+            var forLink = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["removeConnectionDirectiveFromDocument"])(cache.transformForLink(transformed));
+            var clientQuery = this.localState.clientQuery(transformed);
+            var serverQuery = this.localState.serverQuery(forLink);
+            var cacheEntry_1 = {
+                document: transformed,
+                hasClientExports: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["hasClientExports"])(transformed),
+                hasForcedResolvers: this.localState.shouldForceResolvers(transformed),
+                clientQuery: clientQuery,
+                serverQuery: serverQuery,
+                defaultVars: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["getDefaultValues"])(Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["getOperationDefinition"])(transformed)),
+            };
+            var add = function (doc) {
+                if (doc && !transformCache.has(doc)) {
+                    transformCache.set(doc, cacheEntry_1);
+                }
+            };
+            add(document);
+            add(transformed);
+            add(clientQuery);
+            add(serverQuery);
+        }
+        return transformCache.get(document);
+    };
+    QueryManager.prototype.getVariables = function (document, variables) {
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.transform(document).defaultVars), variables);
+    };
+    QueryManager.prototype.watchQuery = function (options, shouldSubscribe) {
+        if (shouldSubscribe === void 0) { shouldSubscribe = true; }
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(options.fetchPolicy !== 'standby', 'client.watchQuery cannot be called with fetchPolicy set to "standby"');
+        options.variables = this.getVariables(options.query, options.variables);
+        if (typeof options.notifyOnNetworkStatusChange === 'undefined') {
+            options.notifyOnNetworkStatusChange = false;
+        }
+        var transformedOptions = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, options);
+        return new ObservableQuery({
+            queryManager: this,
+            options: transformedOptions,
+            shouldSubscribe: shouldSubscribe,
+        });
+    };
+    QueryManager.prototype.query = function (options) {
+        var _this = this;
+        
