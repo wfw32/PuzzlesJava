@@ -9460,4 +9460,203 @@ var QueryManager = (function () {
     };
     QueryManager.prototype.query = function (options) {
         var _this = this;
-        
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(options.query, 'query option is required. You must specify your GraphQL document ' +
+            'in the query option.');
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(options.query.kind === 'Document', 'You must wrap the query string in a "gql" tag.');
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!options.returnPartialData, 'returnPartialData option only supported on watchQuery.');
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(!options.pollInterval, 'pollInterval option only supported on watchQuery.');
+        return new Promise(function (resolve, reject) {
+            var watchedQuery = _this.watchQuery(options, false);
+            _this.fetchQueryRejectFns.set("query:" + watchedQuery.queryId, reject);
+            watchedQuery
+                .result()
+                .then(resolve, reject)
+                .then(function () {
+                return _this.fetchQueryRejectFns.delete("query:" + watchedQuery.queryId);
+            });
+        });
+    };
+    QueryManager.prototype.generateQueryId = function () {
+        return String(this.idCounter++);
+    };
+    QueryManager.prototype.stopQueryInStore = function (queryId) {
+        this.stopQueryInStoreNoBroadcast(queryId);
+        this.broadcastQueries();
+    };
+    QueryManager.prototype.stopQueryInStoreNoBroadcast = function (queryId) {
+        this.stopPollingQuery(queryId);
+        this.queryStore.stopQuery(queryId);
+        this.invalidate(queryId);
+    };
+    QueryManager.prototype.addQueryListener = function (queryId, listener) {
+        this.setQuery(queryId, function (_a) {
+            var listeners = _a.listeners;
+            listeners.add(listener);
+            return { invalidated: false };
+        });
+    };
+    QueryManager.prototype.updateQueryWatch = function (queryId, document, options) {
+        var _this = this;
+        var cancel = this.getQuery(queryId).cancel;
+        if (cancel)
+            cancel();
+        var previousResult = function () {
+            var previousResult = null;
+            var observableQuery = _this.getQuery(queryId).observableQuery;
+            if (observableQuery) {
+                var lastResult = observableQuery.getLastResult();
+                if (lastResult) {
+                    previousResult = lastResult.data;
+                }
+            }
+            return previousResult;
+        };
+        return this.dataStore.getCache().watch({
+            query: document,
+            variables: options.variables,
+            optimistic: true,
+            previousResult: previousResult,
+            callback: function (newData) {
+                _this.setQuery(queryId, function () { return ({ invalidated: true, newData: newData }); });
+            },
+        });
+    };
+    QueryManager.prototype.addObservableQuery = function (queryId, observableQuery) {
+        this.setQuery(queryId, function () { return ({ observableQuery: observableQuery }); });
+    };
+    QueryManager.prototype.removeObservableQuery = function (queryId) {
+        var cancel = this.getQuery(queryId).cancel;
+        this.setQuery(queryId, function () { return ({ observableQuery: null }); });
+        if (cancel)
+            cancel();
+    };
+    QueryManager.prototype.clearStore = function () {
+        this.fetchQueryRejectFns.forEach(function (reject) {
+            reject( false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]('Store reset while query was in flight (not completed in link chain)'));
+        });
+        var resetIds = [];
+        this.queries.forEach(function (_a, queryId) {
+            var observableQuery = _a.observableQuery;
+            if (observableQuery)
+                resetIds.push(queryId);
+        });
+        this.queryStore.reset(resetIds);
+        this.mutationStore.reset();
+        return this.dataStore.reset();
+    };
+    QueryManager.prototype.resetStore = function () {
+        var _this = this;
+        return this.clearStore().then(function () {
+            return _this.reFetchObservableQueries();
+        });
+    };
+    QueryManager.prototype.reFetchObservableQueries = function (includeStandby) {
+        var _this = this;
+        if (includeStandby === void 0) { includeStandby = false; }
+        var observableQueryPromises = [];
+        this.queries.forEach(function (_a, queryId) {
+            var observableQuery = _a.observableQuery;
+            if (observableQuery) {
+                var fetchPolicy = observableQuery.options.fetchPolicy;
+                observableQuery.resetLastResults();
+                if (fetchPolicy !== 'cache-only' &&
+                    (includeStandby || fetchPolicy !== 'standby')) {
+                    observableQueryPromises.push(observableQuery.refetch());
+                }
+                _this.setQuery(queryId, function () { return ({ newData: null }); });
+                _this.invalidate(queryId);
+            }
+        });
+        this.broadcastQueries();
+        return Promise.all(observableQueryPromises);
+    };
+    QueryManager.prototype.observeQuery = function (queryId, options, observer) {
+        this.addQueryListener(queryId, this.queryListenerForObserver(queryId, options, observer));
+        return this.fetchQuery(queryId, options);
+    };
+    QueryManager.prototype.startQuery = function (queryId, options, listener) {
+         false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn("The QueryManager.startQuery method has been deprecated");
+        this.addQueryListener(queryId, listener);
+        this.fetchQuery(queryId, options)
+            .catch(function () { return undefined; });
+        return queryId;
+    };
+    QueryManager.prototype.startGraphQLSubscription = function (_a) {
+        var _this = this;
+        var query = _a.query, fetchPolicy = _a.fetchPolicy, variables = _a.variables;
+        query = this.transform(query).document;
+        variables = this.getVariables(query, variables);
+        var makeObservable = function (variables) {
+            return _this.getObservableFromLink(query, {}, variables, false).map(function (result) {
+                if (!fetchPolicy || fetchPolicy !== 'no-cache') {
+                    _this.dataStore.markSubscriptionResult(result, query, variables);
+                    _this.broadcastQueries();
+                }
+                if (Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(result)) {
+                    throw new ApolloError({
+                        graphQLErrors: result.errors,
+                    });
+                }
+                return result;
+            });
+        };
+        if (this.transform(query).hasClientExports) {
+            var observablePromise_1 = this.localState.addExportedVariables(query, variables).then(makeObservable);
+            return new Observable(function (observer) {
+                var sub = null;
+                observablePromise_1.then(function (observable) { return sub = observable.subscribe(observer); }, observer.error);
+                return function () { return sub && sub.unsubscribe(); };
+            });
+        }
+        return makeObservable(variables);
+    };
+    QueryManager.prototype.stopQuery = function (queryId) {
+        this.stopQueryNoBroadcast(queryId);
+        this.broadcastQueries();
+    };
+    QueryManager.prototype.stopQueryNoBroadcast = function (queryId) {
+        this.stopQueryInStoreNoBroadcast(queryId);
+        this.removeQuery(queryId);
+    };
+    QueryManager.prototype.removeQuery = function (queryId) {
+        this.fetchQueryRejectFns.delete("query:" + queryId);
+        this.fetchQueryRejectFns.delete("fetchRequest:" + queryId);
+        this.getQuery(queryId).subscriptions.forEach(function (x) { return x.unsubscribe(); });
+        this.queries.delete(queryId);
+    };
+    QueryManager.prototype.getCurrentQueryResult = function (observableQuery, optimistic) {
+        if (optimistic === void 0) { optimistic = true; }
+        var _a = observableQuery.options, variables = _a.variables, query = _a.query, fetchPolicy = _a.fetchPolicy, returnPartialData = _a.returnPartialData;
+        var lastResult = observableQuery.getLastResult();
+        var newData = this.getQuery(observableQuery.queryId).newData;
+        if (newData && newData.complete) {
+            return { data: newData.result, partial: false };
+        }
+        if (fetchPolicy === 'no-cache' || fetchPolicy === 'network-only') {
+            return { data: undefined, partial: false };
+        }
+        var _b = this.dataStore.getCache().diff({
+            query: query,
+            variables: variables,
+            previousResult: lastResult ? lastResult.data : undefined,
+            returnPartialData: true,
+            optimistic: optimistic,
+        }), result = _b.result, complete = _b.complete;
+        return {
+            data: (complete || returnPartialData) ? result : void 0,
+            partial: !complete,
+        };
+    };
+    QueryManager.prototype.getQueryWithPreviousResult = function (queryIdOrObservable) {
+        var observableQuery;
+        if (typeof queryIdOrObservable === 'string') {
+            var foundObserveableQuery = this.getQuery(queryIdOrObservable).observableQuery;
+             false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(foundObserveableQuery, "ObservableQuery with this id doesn't exist: " + queryIdOrObservable);
+            observableQuery = foundObserveableQuery;
+        }
+        else {
+            observableQuery = queryIdOrObservable;
+        }
+        var _a = observableQuery.options, variables = _a.variables, query = _a.query;
+        return {
+      
