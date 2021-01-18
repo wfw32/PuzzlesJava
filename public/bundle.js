@@ -10078,4 +10078,203 @@ var ApolloClient = (function () {
             queryDeduplication: queryDeduplication,
             ssrMode: ssrMode,
             clientAwareness: {
-          
+                name: clientAwarenessName,
+                version: clientAwarenessVersion,
+            },
+            localState: this.localState,
+            assumeImmutableResults: assumeImmutableResults,
+            onBroadcast: function () {
+                if (_this.devToolsHookCb) {
+                    _this.devToolsHookCb({
+                        action: {},
+                        state: {
+                            queries: _this.queryManager.queryStore.getStore(),
+                            mutations: _this.queryManager.mutationStore.getStore(),
+                        },
+                        dataWithOptimisticResults: _this.cache.extract(true),
+                    });
+                }
+            },
+        });
+    }
+    ApolloClient.prototype.stop = function () {
+        this.queryManager.stop();
+    };
+    ApolloClient.prototype.watchQuery = function (options) {
+        if (this.defaultOptions.watchQuery) {
+            options = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.defaultOptions.watchQuery), options);
+        }
+        if (this.disableNetworkFetches &&
+            (options.fetchPolicy === 'network-only' ||
+                options.fetchPolicy === 'cache-and-network')) {
+            options = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, options), { fetchPolicy: 'cache-first' });
+        }
+        return this.queryManager.watchQuery(options);
+    };
+    ApolloClient.prototype.query = function (options) {
+        if (this.defaultOptions.query) {
+            options = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.defaultOptions.query), options);
+        }
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"])(options.fetchPolicy !== 'cache-and-network', 'The cache-and-network fetchPolicy does not work with client.query, because ' +
+            'client.query can only return a single result. Please use client.watchQuery ' +
+            'to receive multiple results from the cache and the network, or consider ' +
+            'using a different fetchPolicy, such as cache-first or network-only.');
+        if (this.disableNetworkFetches && options.fetchPolicy === 'network-only') {
+            options = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, options), { fetchPolicy: 'cache-first' });
+        }
+        return this.queryManager.query(options);
+    };
+    ApolloClient.prototype.mutate = function (options) {
+        if (this.defaultOptions.mutate) {
+            options = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, this.defaultOptions.mutate), options);
+        }
+        return this.queryManager.mutate(options);
+    };
+    ApolloClient.prototype.subscribe = function (options) {
+        return this.queryManager.startGraphQLSubscription(options);
+    };
+    ApolloClient.prototype.readQuery = function (options, optimistic) {
+        if (optimistic === void 0) { optimistic = false; }
+        return this.cache.readQuery(options, optimistic);
+    };
+    ApolloClient.prototype.readFragment = function (options, optimistic) {
+        if (optimistic === void 0) { optimistic = false; }
+        return this.cache.readFragment(options, optimistic);
+    };
+    ApolloClient.prototype.writeQuery = function (options) {
+        var result = this.cache.writeQuery(options);
+        this.queryManager.broadcastQueries();
+        return result;
+    };
+    ApolloClient.prototype.writeFragment = function (options) {
+        var result = this.cache.writeFragment(options);
+        this.queryManager.broadcastQueries();
+        return result;
+    };
+    ApolloClient.prototype.writeData = function (options) {
+        var result = this.cache.writeData(options);
+        this.queryManager.broadcastQueries();
+        return result;
+    };
+    ApolloClient.prototype.__actionHookForDevTools = function (cb) {
+        this.devToolsHookCb = cb;
+    };
+    ApolloClient.prototype.__requestRaw = function (payload) {
+        return Object(apollo_link__WEBPACK_IMPORTED_MODULE_2__["execute"])(this.link, payload);
+    };
+    ApolloClient.prototype.initQueryManager = function () {
+         false || ts_invariant__WEBPACK_IMPORTED_MODULE_4__["invariant"].warn('Calling the initQueryManager method is no longer necessary, ' +
+            'and it will be removed from ApolloClient in version 3.0.');
+        return this.queryManager;
+    };
+    ApolloClient.prototype.resetStore = function () {
+        var _this = this;
+        return Promise.resolve()
+            .then(function () { return _this.queryManager.clearStore(); })
+            .then(function () { return Promise.all(_this.resetStoreCallbacks.map(function (fn) { return fn(); })); })
+            .then(function () { return _this.reFetchObservableQueries(); });
+    };
+    ApolloClient.prototype.clearStore = function () {
+        var _this = this;
+        return Promise.resolve()
+            .then(function () { return _this.queryManager.clearStore(); })
+            .then(function () { return Promise.all(_this.clearStoreCallbacks.map(function (fn) { return fn(); })); });
+    };
+    ApolloClient.prototype.onResetStore = function (cb) {
+        var _this = this;
+        this.resetStoreCallbacks.push(cb);
+        return function () {
+            _this.resetStoreCallbacks = _this.resetStoreCallbacks.filter(function (c) { return c !== cb; });
+        };
+    };
+    ApolloClient.prototype.onClearStore = function (cb) {
+        var _this = this;
+        this.clearStoreCallbacks.push(cb);
+        return function () {
+            _this.clearStoreCallbacks = _this.clearStoreCallbacks.filter(function (c) { return c !== cb; });
+        };
+    };
+    ApolloClient.prototype.reFetchObservableQueries = function (includeStandby) {
+        return this.queryManager.reFetchObservableQueries(includeStandby);
+    };
+    ApolloClient.prototype.extract = function (optimistic) {
+        return this.cache.extract(optimistic);
+    };
+    ApolloClient.prototype.restore = function (serializedState) {
+        return this.cache.restore(serializedState);
+    };
+    ApolloClient.prototype.addResolvers = function (resolvers) {
+        this.localState.addResolvers(resolvers);
+    };
+    ApolloClient.prototype.setResolvers = function (resolvers) {
+        this.localState.setResolvers(resolvers);
+    };
+    ApolloClient.prototype.getResolvers = function () {
+        return this.localState.getResolvers();
+    };
+    ApolloClient.prototype.setLocalStateFragmentMatcher = function (fragmentMatcher) {
+        this.localState.setFragmentMatcher(fragmentMatcher);
+    };
+    return ApolloClient;
+}());
+
+/* harmony default export */ __webpack_exports__["default"] = (ApolloClient);
+
+//# sourceMappingURL=bundle.esm.js.map
+
+
+/***/ }),
+
+/***/ "./node_modules/apollo-client/node_modules/ts-invariant/lib/invariant.esm.js":
+/*!***********************************************************************************!*\
+  !*** ./node_modules/apollo-client/node_modules/ts-invariant/lib/invariant.esm.js ***!
+  \***********************************************************************************/
+/*! exports provided: default, InvariantError, invariant, process */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* WEBPACK VAR INJECTION */(function(process) {/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "InvariantError", function() { return InvariantError; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "invariant", function() { return invariant; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "process", function() { return processStub; });
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ "./node_modules/tslib/tslib.es6.js");
+
+
+var genericMessage = "Invariant Violation";
+var _a = Object.setPrototypeOf, setPrototypeOf = _a === void 0 ? function (obj, proto) {
+    obj.__proto__ = proto;
+    return obj;
+} : _a;
+var InvariantError = /** @class */ (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(InvariantError, _super);
+    function InvariantError(message) {
+        if (message === void 0) { message = genericMessage; }
+        var _this = _super.call(this, typeof message === "number"
+            ? genericMessage + ": " + message + " (see https://github.com/apollographql/invariant-packages)"
+            : message) || this;
+        _this.framesToPop = 1;
+        _this.name = genericMessage;
+        setPrototypeOf(_this, InvariantError.prototype);
+        return _this;
+    }
+    return InvariantError;
+}(Error));
+function invariant(condition, message) {
+    if (!condition) {
+        throw new InvariantError(message);
+    }
+}
+function wrapConsoleMethod(method) {
+    return function () {
+        return console[method].apply(console, arguments);
+    };
+}
+(function (invariant) {
+    invariant.warn = wrapConsoleMethod("warn");
+    invariant.error = wrapConsoleMethod("error");
+})(invariant || (invariant = {}));
+// Code that uses ts-invariant with rollup-plugin-invariant may want to
+// import this process stub to avoid errors evaluating process.env.NODE_ENV.
+// However, because most ESM-to-CJS compilers will rewrite the process import
+// as tsInvariant.process, which prevents proper replacement by minifiers, we
+// also attemp
