@@ -9867,4 +9867,215 @@ var QueryManager = (function () {
                 }
             };
             if (listener) {
-  
+                this.addQueryListener(queryId, listener);
+            }
+            poll_1();
+        }
+        return queryId;
+    };
+    QueryManager.prototype.stopPollingQuery = function (queryId) {
+        this.pollingInfoByQueryId.delete(queryId);
+    };
+    return QueryManager;
+}());
+
+var DataStore = (function () {
+    function DataStore(initialCache) {
+        this.cache = initialCache;
+    }
+    DataStore.prototype.getCache = function () {
+        return this.cache;
+    };
+    DataStore.prototype.markQueryResult = function (result, document, variables, fetchMoreForQueryId, ignoreErrors) {
+        if (ignoreErrors === void 0) { ignoreErrors = false; }
+        var writeWithErrors = !Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(result);
+        if (ignoreErrors && Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(result) && result.data) {
+            writeWithErrors = true;
+        }
+        if (!fetchMoreForQueryId && writeWithErrors) {
+            this.cache.write({
+                result: result.data,
+                dataId: 'ROOT_QUERY',
+                query: document,
+                variables: variables,
+            });
+        }
+    };
+    DataStore.prototype.markSubscriptionResult = function (result, document, variables) {
+        if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(result)) {
+            this.cache.write({
+                result: result.data,
+                dataId: 'ROOT_SUBSCRIPTION',
+                query: document,
+                variables: variables,
+            });
+        }
+    };
+    DataStore.prototype.markMutationInit = function (mutation) {
+        var _this = this;
+        if (mutation.optimisticResponse) {
+            var optimistic_1;
+            if (typeof mutation.optimisticResponse === 'function') {
+                optimistic_1 = mutation.optimisticResponse(mutation.variables);
+            }
+            else {
+                optimistic_1 = mutation.optimisticResponse;
+            }
+            this.cache.recordOptimisticTransaction(function (c) {
+                var orig = _this.cache;
+                _this.cache = c;
+                try {
+                    _this.markMutationResult({
+                        mutationId: mutation.mutationId,
+                        result: { data: optimistic_1 },
+                        document: mutation.document,
+                        variables: mutation.variables,
+                        updateQueries: mutation.updateQueries,
+                        update: mutation.update,
+                    });
+                }
+                finally {
+                    _this.cache = orig;
+                }
+            }, mutation.mutationId);
+        }
+    };
+    DataStore.prototype.markMutationResult = function (mutation) {
+        var _this = this;
+        if (!Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["graphQLResultHasError"])(mutation.result)) {
+            var cacheWrites_1 = [{
+                    result: mutation.result.data,
+                    dataId: 'ROOT_MUTATION',
+                    query: mutation.document,
+                    variables: mutation.variables,
+                }];
+            var updateQueries_1 = mutation.updateQueries;
+            if (updateQueries_1) {
+                Object.keys(updateQueries_1).forEach(function (id) {
+                    var _a = updateQueries_1[id], query = _a.query, updater = _a.updater;
+                    var _b = _this.cache.diff({
+                        query: query.document,
+                        variables: query.variables,
+                        returnPartialData: true,
+                        optimistic: false,
+                    }), currentQueryResult = _b.result, complete = _b.complete;
+                    if (complete) {
+                        var nextQueryResult = Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["tryFunctionOrLogError"])(function () {
+                            return updater(currentQueryResult, {
+                                mutationResult: mutation.result,
+                                queryName: Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["getOperationName"])(query.document) || undefined,
+                                queryVariables: query.variables,
+                            });
+                        });
+                        if (nextQueryResult) {
+                            cacheWrites_1.push({
+                                result: nextQueryResult,
+                                dataId: 'ROOT_QUERY',
+                                query: query.document,
+                                variables: query.variables,
+                            });
+                        }
+                    }
+                });
+            }
+            this.cache.performTransaction(function (c) {
+                cacheWrites_1.forEach(function (write) { return c.write(write); });
+                var update = mutation.update;
+                if (update) {
+                    Object(apollo_utilities__WEBPACK_IMPORTED_MODULE_1__["tryFunctionOrLogError"])(function () { return update(c, mutation.result); });
+                }
+            });
+        }
+    };
+    DataStore.prototype.markMutationComplete = function (_a) {
+        var mutationId = _a.mutationId, optimisticResponse = _a.optimisticResponse;
+        if (optimisticResponse) {
+            this.cache.removeOptimistic(mutationId);
+        }
+    };
+    DataStore.prototype.markUpdateQueryResult = function (document, variables, newResult) {
+        this.cache.write({
+            result: newResult,
+            dataId: 'ROOT_QUERY',
+            variables: variables,
+            query: document,
+        });
+    };
+    DataStore.prototype.reset = function () {
+        return this.cache.reset();
+    };
+    return DataStore;
+}());
+
+var version = "2.6.10";
+
+var hasSuggestedDevtools = false;
+var ApolloClient = (function () {
+    function ApolloClient(options) {
+        var _this = this;
+        this.defaultOptions = {};
+        this.resetStoreCallbacks = [];
+        this.clearStoreCallbacks = [];
+        var cache = options.cache, _a = options.ssrMode, ssrMode = _a === void 0 ? false : _a, _b = options.ssrForceFetchDelay, ssrForceFetchDelay = _b === void 0 ? 0 : _b, connectToDevTools = options.connectToDevTools, _c = options.queryDeduplication, queryDeduplication = _c === void 0 ? true : _c, defaultOptions = options.defaultOptions, _d = options.assumeImmutableResults, assumeImmutableResults = _d === void 0 ? false : _d, resolvers = options.resolvers, typeDefs = options.typeDefs, fragmentMatcher = options.fragmentMatcher, clientAwarenessName = options.name, clientAwarenessVersion = options.version;
+        var link = options.link;
+        if (!link && resolvers) {
+            link = apollo_link__WEBPACK_IMPORTED_MODULE_2__["ApolloLink"].empty();
+        }
+        if (!link || !cache) {
+            throw  false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_4__["InvariantError"]("In order to initialize Apollo Client, you must specify 'link' and 'cache' properties in the options object.\n" +
+                "These options are part of the upgrade requirements when migrating from Apollo Client 1.x to Apollo Client 2.x.\n" +
+                "For more information, please visit: https://www.apollographql.com/docs/tutorial/client.html#apollo-client-setup");
+        }
+        this.link = link;
+        this.cache = cache;
+        this.store = new DataStore(cache);
+        this.disableNetworkFetches = ssrMode || ssrForceFetchDelay > 0;
+        this.queryDeduplication = queryDeduplication;
+        this.defaultOptions = defaultOptions || {};
+        this.typeDefs = typeDefs;
+        if (ssrForceFetchDelay) {
+            setTimeout(function () { return (_this.disableNetworkFetches = false); }, ssrForceFetchDelay);
+        }
+        this.watchQuery = this.watchQuery.bind(this);
+        this.query = this.query.bind(this);
+        this.mutate = this.mutate.bind(this);
+        this.resetStore = this.resetStore.bind(this);
+        this.reFetchObservableQueries = this.reFetchObservableQueries.bind(this);
+        var defaultConnectToDevTools =  true &&
+            typeof window !== 'undefined' &&
+            !window.__APOLLO_CLIENT__;
+        if (typeof connectToDevTools === 'undefined'
+            ? defaultConnectToDevTools
+            : connectToDevTools && typeof window !== 'undefined') {
+            window.__APOLLO_CLIENT__ = this;
+        }
+        if (!hasSuggestedDevtools && "development" !== 'production') {
+            hasSuggestedDevtools = true;
+            if (typeof window !== 'undefined' &&
+                window.document &&
+                window.top === window.self) {
+                if (typeof window.__APOLLO_DEVTOOLS_GLOBAL_HOOK__ === 'undefined') {
+                    if (window.navigator &&
+                        window.navigator.userAgent &&
+                        window.navigator.userAgent.indexOf('Chrome') > -1) {
+                        console.debug('Download the Apollo DevTools ' +
+                            'for a better development experience: ' +
+                            'https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm');
+                    }
+                }
+            }
+        }
+        this.version = version;
+        this.localState = new LocalState({
+            cache: cache,
+            client: this,
+            resolvers: resolvers,
+            fragmentMatcher: fragmentMatcher,
+        });
+        this.queryManager = new QueryManager({
+            link: this.link,
+            store: this.store,
+            queryDeduplication: queryDeduplication,
+            ssrMode: ssrMode,
+            clientAwareness: {
+          
