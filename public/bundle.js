@@ -10682,4 +10682,214 @@ var createHttpLink = function (linkOptions) {
         }
         var contextHeaders = Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, clientAwarenessHeaders, context.headers);
         var contextConfig = {
-            http: contex
+            http: context.http,
+            options: context.fetchOptions,
+            credentials: context.credentials,
+            headers: contextHeaders,
+        };
+        var _b = Object(apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["selectHttpOptionsAndBody"])(operation, apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["fallbackHttpConfig"], linkConfig, contextConfig), options = _b.options, body = _b.body;
+        var controller;
+        if (!options.signal) {
+            var _c = Object(apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["createSignalIfSupported"])(), _controller = _c.controller, signal = _c.signal;
+            controller = _controller;
+            if (controller)
+                options.signal = signal;
+        }
+        var definitionIsMutation = function (d) {
+            return d.kind === 'OperationDefinition' && d.operation === 'mutation';
+        };
+        if (useGETForQueries &&
+            !operation.query.definitions.some(definitionIsMutation)) {
+            options.method = 'GET';
+        }
+        if (options.method === 'GET') {
+            var _d = rewriteURIForGET(chosenURI, body), newURI = _d.newURI, parseError = _d.parseError;
+            if (parseError) {
+                return Object(apollo_link__WEBPACK_IMPORTED_MODULE_1__["fromError"])(parseError);
+            }
+            chosenURI = newURI;
+        }
+        else {
+            try {
+                options.body = Object(apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["serializeFetchParameter"])(body, 'Payload');
+            }
+            catch (parseError) {
+                return Object(apollo_link__WEBPACK_IMPORTED_MODULE_1__["fromError"])(parseError);
+            }
+        }
+        return new apollo_link__WEBPACK_IMPORTED_MODULE_1__["Observable"](function (observer) {
+            fetcher(chosenURI, options)
+                .then(function (response) {
+                operation.setContext({ response: response });
+                return response;
+            })
+                .then(Object(apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["parseAndCheckHttpResponse"])(operation))
+                .then(function (result) {
+                observer.next(result);
+                observer.complete();
+                return result;
+            })
+                .catch(function (err) {
+                if (err.name === 'AbortError')
+                    return;
+                if (err.result && err.result.errors && err.result.data) {
+                    observer.next(err.result);
+                }
+                observer.error(err);
+            });
+            return function () {
+                if (controller)
+                    controller.abort();
+            };
+        });
+    });
+};
+function rewriteURIForGET(chosenURI, body) {
+    var queryParams = [];
+    var addQueryParam = function (key, value) {
+        queryParams.push(key + "=" + encodeURIComponent(value));
+    };
+    if ('query' in body) {
+        addQueryParam('query', body.query);
+    }
+    if (body.operationName) {
+        addQueryParam('operationName', body.operationName);
+    }
+    if (body.variables) {
+        var serializedVariables = void 0;
+        try {
+            serializedVariables = Object(apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["serializeFetchParameter"])(body.variables, 'Variables map');
+        }
+        catch (parseError) {
+            return { parseError: parseError };
+        }
+        addQueryParam('variables', serializedVariables);
+    }
+    if (body.extensions) {
+        var serializedExtensions = void 0;
+        try {
+            serializedExtensions = Object(apollo_link_http_common__WEBPACK_IMPORTED_MODULE_2__["serializeFetchParameter"])(body.extensions, 'Extensions map');
+        }
+        catch (parseError) {
+            return { parseError: parseError };
+        }
+        addQueryParam('extensions', serializedExtensions);
+    }
+    var fragment = '', preFragment = chosenURI;
+    var fragmentStart = chosenURI.indexOf('#');
+    if (fragmentStart !== -1) {
+        fragment = chosenURI.substr(fragmentStart);
+        preFragment = chosenURI.substr(0, fragmentStart);
+    }
+    var queryParamsPrefix = preFragment.indexOf('?') === -1 ? '?' : '&';
+    var newURI = preFragment + queryParamsPrefix + queryParams.join('&') + fragment;
+    return { newURI: newURI };
+}
+var HttpLink = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(HttpLink, _super);
+    function HttpLink(opts) {
+        return _super.call(this, createHttpLink(opts).request) || this;
+    }
+    return HttpLink;
+}(apollo_link__WEBPACK_IMPORTED_MODULE_1__["ApolloLink"]));
+
+
+//# sourceMappingURL=bundle.esm.js.map
+
+
+/***/ }),
+
+/***/ "./node_modules/apollo-link/lib/bundle.esm.js":
+/*!****************************************************!*\
+  !*** ./node_modules/apollo-link/lib/bundle.esm.js ***!
+  \****************************************************/
+/*! exports provided: Observable, getOperationName, ApolloLink, concat, createOperation, empty, execute, from, fromError, fromPromise, makePromise, split, toPromise */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ApolloLink", function() { return ApolloLink; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "concat", function() { return concat; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "createOperation", function() { return createOperation; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "empty", function() { return empty; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "execute", function() { return execute; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "from", function() { return from; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "fromError", function() { return fromError; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "fromPromise", function() { return fromPromise; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "makePromise", function() { return makePromise; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "split", function() { return split; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "toPromise", function() { return toPromise; });
+/* harmony import */ var zen_observable_ts__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! zen-observable-ts */ "./node_modules/zen-observable-ts/lib/bundle.esm.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Observable", function() { return zen_observable_ts__WEBPACK_IMPORTED_MODULE_0__["default"]; });
+
+/* harmony import */ var ts_invariant__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ts-invariant */ "./node_modules/apollo-link/node_modules/ts-invariant/lib/invariant.esm.js");
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! tslib */ "./node_modules/tslib/tslib.es6.js");
+/* harmony import */ var apollo_utilities__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! apollo-utilities */ "./node_modules/apollo-utilities/lib/bundle.esm.js");
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "getOperationName", function() { return apollo_utilities__WEBPACK_IMPORTED_MODULE_3__["getOperationName"]; });
+
+
+
+
+
+
+
+
+function validateOperation(operation) {
+    var OPERATION_FIELDS = [
+        'query',
+        'operationName',
+        'variables',
+        'extensions',
+        'context',
+    ];
+    for (var _i = 0, _a = Object.keys(operation); _i < _a.length; _i++) {
+        var key = _a[_i];
+        if (OPERATION_FIELDS.indexOf(key) < 0) {
+            throw  false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_1__["InvariantError"]("illegal argument: " + key);
+        }
+    }
+    return operation;
+}
+var LinkError = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_2__["__extends"])(LinkError, _super);
+    function LinkError(message, link) {
+        var _this = _super.call(this, message) || this;
+        _this.link = link;
+        return _this;
+    }
+    return LinkError;
+}(Error));
+function isTerminating(link) {
+    return link.request.length <= 1;
+}
+function toPromise(observable) {
+    var completed = false;
+    return new Promise(function (resolve, reject) {
+        observable.subscribe({
+            next: function (data) {
+                if (completed) {
+                     false || ts_invariant__WEBPACK_IMPORTED_MODULE_1__["invariant"].warn("Promise Wrapper does not support multiple results from Observable");
+                }
+                else {
+                    completed = true;
+                    resolve(data);
+                }
+            },
+            error: reject,
+        });
+    });
+}
+var makePromise = toPromise;
+function fromPromise(promise) {
+    return new zen_observable_ts__WEBPACK_IMPORTED_MODULE_0__["default"](function (observer) {
+        promise
+            .then(function (value) {
+            observer.next(value);
+            observer.complete();
+        })
+            .catch(observer.error.bind(observer));
+    });
+}
+function fromError(errorValue) {
+    return new zen_observable_ts__WEBPACK_IMPORTED_MODULE_0__["default"](function (observer) {
+        observer.error(errorValu
