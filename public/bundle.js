@@ -26187,4 +26187,340 @@ function () {
     var directives = this.parseDirectives(true);
     var fields = this.parseInputFieldsDefinition();
 
-    if (directives.length ==
+    if (directives.length === 0 && fields.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.INPUT_OBJECT_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * DirectiveDefinition :
+   *   - Description? directive @ Name ArgumentsDefinition? `repeatable`? on DirectiveLocations
+   */
+  ;
+
+  _proto.parseDirectiveDefinition = function parseDirectiveDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('directive');
+    this.expectToken(_tokenKind.TokenKind.AT);
+    var name = this.parseName();
+    var args = this.parseArgumentDefs();
+    var repeatable = this.expectOptionalKeyword('repeatable');
+    this.expectKeyword('on');
+    var locations = this.parseDirectiveLocations();
+    return {
+      kind: _kinds.Kind.DIRECTIVE_DEFINITION,
+      description: description,
+      name: name,
+      arguments: args,
+      repeatable: repeatable,
+      locations: locations,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * DirectiveLocations :
+   *   - `|`? DirectiveLocation
+   *   - DirectiveLocations | DirectiveLocation
+   */
+  ;
+
+  _proto.parseDirectiveLocations = function parseDirectiveLocations() {
+    // Optional leading pipe
+    this.expectOptionalToken(_tokenKind.TokenKind.PIPE);
+    var locations = [];
+
+    do {
+      locations.push(this.parseDirectiveLocation());
+    } while (this.expectOptionalToken(_tokenKind.TokenKind.PIPE));
+
+    return locations;
+  }
+  /*
+   * DirectiveLocation :
+   *   - ExecutableDirectiveLocation
+   *   - TypeSystemDirectiveLocation
+   *
+   * ExecutableDirectiveLocation : one of
+   *   `QUERY`
+   *   `MUTATION`
+   *   `SUBSCRIPTION`
+   *   `FIELD`
+   *   `FRAGMENT_DEFINITION`
+   *   `FRAGMENT_SPREAD`
+   *   `INLINE_FRAGMENT`
+   *
+   * TypeSystemDirectiveLocation : one of
+   *   `SCHEMA`
+   *   `SCALAR`
+   *   `OBJECT`
+   *   `FIELD_DEFINITION`
+   *   `ARGUMENT_DEFINITION`
+   *   `INTERFACE`
+   *   `UNION`
+   *   `ENUM`
+   *   `ENUM_VALUE`
+   *   `INPUT_OBJECT`
+   *   `INPUT_FIELD_DEFINITION`
+   */
+  ;
+
+  _proto.parseDirectiveLocation = function parseDirectiveLocation() {
+    var start = this._lexer.token;
+    var name = this.parseName();
+
+    if (_directiveLocation.DirectiveLocation[name.value] !== undefined) {
+      return name;
+    }
+
+    throw this.unexpected(start);
+  } // Core parsing utility functions
+
+  /**
+   * Returns a location object, used to identify the place in
+   * the source that created a given parsed object.
+   */
+  ;
+
+  _proto.loc = function loc(startToken) {
+    if (!this._options.noLocation) {
+      return new Loc(startToken, this._lexer.lastToken, this._lexer.source);
+    }
+  }
+  /**
+   * Determines if the next token is of a given kind
+   */
+  ;
+
+  _proto.peek = function peek(kind) {
+    return this._lexer.token.kind === kind;
+  }
+  /**
+   * If the next token is of the given kind, return that token after advancing
+   * the lexer. Otherwise, do not change the parser state and throw an error.
+   */
+  ;
+
+  _proto.expectToken = function expectToken(kind) {
+    var token = this._lexer.token;
+
+    if (token.kind === kind) {
+      this._lexer.advance();
+
+      return token;
+    }
+
+    throw (0, _syntaxError.syntaxError)(this._lexer.source, token.start, "Expected ".concat(kind, ", found ").concat(getTokenDesc(token)));
+  }
+  /**
+   * If the next token is of the given kind, return that token after advancing
+   * the lexer. Otherwise, do not change the parser state and return undefined.
+   */
+  ;
+
+  _proto.expectOptionalToken = function expectOptionalToken(kind) {
+    var token = this._lexer.token;
+
+    if (token.kind === kind) {
+      this._lexer.advance();
+
+      return token;
+    }
+
+    return undefined;
+  }
+  /**
+   * If the next token is a given keyword, advance the lexer.
+   * Otherwise, do not change the parser state and throw an error.
+   */
+  ;
+
+  _proto.expectKeyword = function expectKeyword(value) {
+    var token = this._lexer.token;
+
+    if (token.kind === _tokenKind.TokenKind.NAME && token.value === value) {
+      this._lexer.advance();
+    } else {
+      throw (0, _syntaxError.syntaxError)(this._lexer.source, token.start, "Expected \"".concat(value, "\", found ").concat(getTokenDesc(token)));
+    }
+  }
+  /**
+   * If the next token is a given keyword, return "true" after advancing
+   * the lexer. Otherwise, do not change the parser state and return "false".
+   */
+  ;
+
+  _proto.expectOptionalKeyword = function expectOptionalKeyword(value) {
+    var token = this._lexer.token;
+
+    if (token.kind === _tokenKind.TokenKind.NAME && token.value === value) {
+      this._lexer.advance();
+
+      return true;
+    }
+
+    return false;
+  }
+  /**
+   * Helper function for creating an error when an unexpected lexed token
+   * is encountered.
+   */
+  ;
+
+  _proto.unexpected = function unexpected(atToken) {
+    var token = atToken || this._lexer.token;
+    return (0, _syntaxError.syntaxError)(this._lexer.source, token.start, "Unexpected ".concat(getTokenDesc(token)));
+  }
+  /**
+   * Returns a possibly empty list of parse nodes, determined by
+   * the parseFn. This list begins with a lex token of openKind
+   * and ends with a lex token of closeKind. Advances the parser
+   * to the next lex token after the closing token.
+   */
+  ;
+
+  _proto.any = function any(openKind, parseFn, closeKind) {
+    this.expectToken(openKind);
+    var nodes = [];
+
+    while (!this.expectOptionalToken(closeKind)) {
+      nodes.push(parseFn.call(this));
+    }
+
+    return nodes;
+  }
+  /**
+   * Returns a list of parse nodes, determined by the parseFn.
+   * It can be empty only if open token is missing otherwise it will always
+   * return non-empty list that begins with a lex token of openKind and ends
+   * with a lex token of closeKind. Advances the parser to the next lex token
+   * after the closing token.
+   */
+  ;
+
+  _proto.optionalMany = function optionalMany(openKind, parseFn, closeKind) {
+    if (this.expectOptionalToken(openKind)) {
+      var nodes = [];
+
+      do {
+        nodes.push(parseFn.call(this));
+      } while (!this.expectOptionalToken(closeKind));
+
+      return nodes;
+    }
+
+    return [];
+  }
+  /**
+   * Returns a non-empty list of parse nodes, determined by
+   * the parseFn. This list begins with a lex token of openKind
+   * and ends with a lex token of closeKind. Advances the parser
+   * to the next lex token after the closing token.
+   */
+  ;
+
+  _proto.many = function many(openKind, parseFn, closeKind) {
+    this.expectToken(openKind);
+    var nodes = [];
+
+    do {
+      nodes.push(parseFn.call(this));
+    } while (!this.expectOptionalToken(closeKind));
+
+    return nodes;
+  };
+
+  return Parser;
+}();
+
+function Loc(startToken, endToken, source) {
+  this.start = startToken.start;
+  this.end = endToken.end;
+  this.startToken = startToken;
+  this.endToken = endToken;
+  this.source = source;
+} // Print a simplified form when appearing in JSON/util.inspect.
+
+
+(0, _defineToJSON.default)(Loc, function () {
+  return {
+    start: this.start,
+    end: this.end
+  };
+});
+/**
+ * A helper function to describe a token as a string for debugging
+ */
+
+function getTokenDesc(token) {
+  var value = token.value;
+  return value ? "".concat(token.kind, " \"").concat(value, "\"") : token.kind;
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/graphql/language/printLocation.js":
+/*!********************************************************!*\
+  !*** ./node_modules/graphql/language/printLocation.js ***!
+  \********************************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.printLocation = printLocation;
+exports.printSourceLocation = printSourceLocation;
+
+var _location = __webpack_require__(/*! ../language/location */ "./node_modules/graphql/language/location.js");
+
+/**
+ * Render a helpful description of the location in the GraphQL Source document.
+ */
+function printLocation(location) {
+  return printSourceLocation(location.source, (0, _location.getLocation)(location.source, location.start));
+}
+/**
+ * Render a helpful description of the location in the GraphQL Source document.
+ */
+
+
+function printSourceLocation(source, sourceLocation) {
+  var firstLineColumnOffset = source.locationOffset.column - 1;
+  var body = whitespace(firstLineColumnOffset) + source.body;
+  var lineIndex = sourceLocation.line - 1;
+  var lineOffset = source.locationOffset.line - 1;
+  var lineNum = sourceLocation.line + lineOffset;
+  var columnOffset = sourceLocation.line === 1 ? firstLineColumnOffset : 0;
+  var columnNum = sourceLocation.column + columnOffset;
+  var locationStr = "".concat(source.name, ":").concat(lineNum, ":").concat(columnNum, "\n");
+  var lines = body.split(/\r\n|[\n\r]/g);
+  var locationLine = lines[lineIndex]; // Special case for minified documents
+
+  if (locationLine.length > 120) {
+    var sublineIndex = Math.floor(columnNum / 80);
+    var sublineColumnNum = columnNum % 80;
+    var sublines = [];
+
+    for (var i = 0; i < locationLine.length; i += 80) {
+      sublines.push(locationLine.slice(i, i + 80));
+    }
+
+    return locationStr + printPrefixedLines([["".concat(lineNum), sublines[0]]].concat(sublines.slice(1, sublineIndex + 1).map(function (subline) {
+      return ['', subline];
+    }), [[' ', whitespace(sublineColumnNum - 1) + '^'], ['', sublines[sublineIndex + 1]]]));
+  }
+
+  return locationStr + printPrefixedLines([// Lines specified like this: ["prefix", "string"],
+  ["".concat(lineNum - 1), lines[lineIndex - 1]], ["".concat(l
