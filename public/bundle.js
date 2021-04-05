@@ -25837,4 +25837,354 @@ function () {
     var fields = this.parseFieldsDefinition();
     return {
       kind: _kinds.Kind.INTERFACE_TYPE_DEFINITION,
- 
+      description: description,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * UnionTypeDefinition :
+   *   - Description? union Name Directives[Const]? UnionMemberTypes?
+   */
+  ;
+
+  _proto.parseUnionTypeDefinition = function parseUnionTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('union');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var types = this.parseUnionMemberTypes();
+    return {
+      kind: _kinds.Kind.UNION_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      types: types,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * UnionMemberTypes :
+   *   - = `|`? NamedType
+   *   - UnionMemberTypes | NamedType
+   */
+  ;
+
+  _proto.parseUnionMemberTypes = function parseUnionMemberTypes() {
+    var types = [];
+
+    if (this.expectOptionalToken(_tokenKind.TokenKind.EQUALS)) {
+      // Optional leading pipe
+      this.expectOptionalToken(_tokenKind.TokenKind.PIPE);
+
+      do {
+        types.push(this.parseNamedType());
+      } while (this.expectOptionalToken(_tokenKind.TokenKind.PIPE));
+    }
+
+    return types;
+  }
+  /**
+   * EnumTypeDefinition :
+   *   - Description? enum Name Directives[Const]? EnumValuesDefinition?
+   */
+  ;
+
+  _proto.parseEnumTypeDefinition = function parseEnumTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('enum');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var values = this.parseEnumValuesDefinition();
+    return {
+      kind: _kinds.Kind.ENUM_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      values: values,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * EnumValuesDefinition : { EnumValueDefinition+ }
+   */
+  ;
+
+  _proto.parseEnumValuesDefinition = function parseEnumValuesDefinition() {
+    return this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseEnumValueDefinition, _tokenKind.TokenKind.BRACE_R);
+  }
+  /**
+   * EnumValueDefinition : Description? EnumValue Directives[Const]?
+   *
+   * EnumValue : Name
+   */
+  ;
+
+  _proto.parseEnumValueDefinition = function parseEnumValueDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    return {
+      kind: _kinds.Kind.ENUM_VALUE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InputObjectTypeDefinition :
+   *   - Description? input Name Directives[Const]? InputFieldsDefinition?
+   */
+  ;
+
+  _proto.parseInputObjectTypeDefinition = function parseInputObjectTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('input');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseInputFieldsDefinition();
+    return {
+      kind: _kinds.Kind.INPUT_OBJECT_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InputFieldsDefinition : { InputValueDefinition+ }
+   */
+  ;
+
+  _proto.parseInputFieldsDefinition = function parseInputFieldsDefinition() {
+    return this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseInputValueDef, _tokenKind.TokenKind.BRACE_R);
+  }
+  /**
+   * TypeSystemExtension :
+   *   - SchemaExtension
+   *   - TypeExtension
+   *
+   * TypeExtension :
+   *   - ScalarTypeExtension
+   *   - ObjectTypeExtension
+   *   - InterfaceTypeExtension
+   *   - UnionTypeExtension
+   *   - EnumTypeExtension
+   *   - InputObjectTypeDefinition
+   */
+  ;
+
+  _proto.parseTypeSystemExtension = function parseTypeSystemExtension() {
+    var keywordToken = this._lexer.lookahead();
+
+    if (keywordToken.kind === _tokenKind.TokenKind.NAME) {
+      switch (keywordToken.value) {
+        case 'schema':
+          return this.parseSchemaExtension();
+
+        case 'scalar':
+          return this.parseScalarTypeExtension();
+
+        case 'type':
+          return this.parseObjectTypeExtension();
+
+        case 'interface':
+          return this.parseInterfaceTypeExtension();
+
+        case 'union':
+          return this.parseUnionTypeExtension();
+
+        case 'enum':
+          return this.parseEnumTypeExtension();
+
+        case 'input':
+          return this.parseInputObjectTypeExtension();
+      }
+    }
+
+    throw this.unexpected(keywordToken);
+  }
+  /**
+   * SchemaExtension :
+   *  - extend schema Directives[Const]? { OperationTypeDefinition+ }
+   *  - extend schema Directives[Const]
+   */
+  ;
+
+  _proto.parseSchemaExtension = function parseSchemaExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('schema');
+    var directives = this.parseDirectives(true);
+    var operationTypes = this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseOperationTypeDefinition, _tokenKind.TokenKind.BRACE_R);
+
+    if (directives.length === 0 && operationTypes.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.SCHEMA_EXTENSION,
+      directives: directives,
+      operationTypes: operationTypes,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ScalarTypeExtension :
+   *   - extend scalar Name Directives[Const]
+   */
+  ;
+
+  _proto.parseScalarTypeExtension = function parseScalarTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('scalar');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+
+    if (directives.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.SCALAR_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ObjectTypeExtension :
+   *  - extend type Name ImplementsInterfaces? Directives[Const]? FieldsDefinition
+   *  - extend type Name ImplementsInterfaces? Directives[Const]
+   *  - extend type Name ImplementsInterfaces
+   */
+  ;
+
+  _proto.parseObjectTypeExtension = function parseObjectTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('type');
+    var name = this.parseName();
+    var interfaces = this.parseImplementsInterfaces();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseFieldsDefinition();
+
+    if (interfaces.length === 0 && directives.length === 0 && fields.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.OBJECT_TYPE_EXTENSION,
+      name: name,
+      interfaces: interfaces,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InterfaceTypeExtension :
+   *   - extend interface Name Directives[Const]? FieldsDefinition
+   *   - extend interface Name Directives[Const]
+   */
+  ;
+
+  _proto.parseInterfaceTypeExtension = function parseInterfaceTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('interface');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseFieldsDefinition();
+
+    if (directives.length === 0 && fields.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.INTERFACE_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * UnionTypeExtension :
+   *   - extend union Name Directives[Const]? UnionMemberTypes
+   *   - extend union Name Directives[Const]
+   */
+  ;
+
+  _proto.parseUnionTypeExtension = function parseUnionTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('union');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var types = this.parseUnionMemberTypes();
+
+    if (directives.length === 0 && types.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.UNION_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      types: types,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * EnumTypeExtension :
+   *   - extend enum Name Directives[Const]? EnumValuesDefinition
+   *   - extend enum Name Directives[Const]
+   */
+  ;
+
+  _proto.parseEnumTypeExtension = function parseEnumTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('enum');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var values = this.parseEnumValuesDefinition();
+
+    if (directives.length === 0 && values.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.ENUM_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      values: values,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InputObjectTypeExtension :
+   *   - extend input Name Directives[Const]? InputFieldsDefinition
+   *   - extend input Name Directives[Const]
+   */
+  ;
+
+  _proto.parseInputObjectTypeExtension = function parseInputObjectTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('input');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseInputFieldsDefinition();
+
+    if (directives.length ==
