@@ -30756,4 +30756,260 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wry_context__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @wry/context */ "./node_modules/@wry/context/lib/context.esm.js");
 /* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "asyncFromGen", function() { return _wry_context__WEBPACK_IMPORTED_MODULE_0__["asyncFromGen"]; });
 
-/* harmony reexport (safe) */ __webpack_require__.
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "bindContext", function() { return _wry_context__WEBPACK_IMPORTED_MODULE_0__["bind"]; });
+
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "noContext", function() { return _wry_context__WEBPACK_IMPORTED_MODULE_0__["noContext"]; });
+
+/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "setTimeout", function() { return _wry_context__WEBPACK_IMPORTED_MODULE_0__["setTimeout"]; });
+
+
+
+
+function defaultDispose() { }
+var Cache = /** @class */ (function () {
+    function Cache(max, dispose) {
+        if (max === void 0) { max = Infinity; }
+        if (dispose === void 0) { dispose = defaultDispose; }
+        this.max = max;
+        this.dispose = dispose;
+        this.map = new Map();
+        this.newest = null;
+        this.oldest = null;
+    }
+    Cache.prototype.has = function (key) {
+        return this.map.has(key);
+    };
+    Cache.prototype.get = function (key) {
+        var entry = this.getEntry(key);
+        return entry && entry.value;
+    };
+    Cache.prototype.getEntry = function (key) {
+        var entry = this.map.get(key);
+        if (entry && entry !== this.newest) {
+            var older = entry.older, newer = entry.newer;
+            if (newer) {
+                newer.older = older;
+            }
+            if (older) {
+                older.newer = newer;
+            }
+            entry.older = this.newest;
+            entry.older.newer = entry;
+            entry.newer = null;
+            this.newest = entry;
+            if (entry === this.oldest) {
+                this.oldest = newer;
+            }
+        }
+        return entry;
+    };
+    Cache.prototype.set = function (key, value) {
+        var entry = this.getEntry(key);
+        if (entry) {
+            return entry.value = value;
+        }
+        entry = {
+            key: key,
+            value: value,
+            newer: null,
+            older: this.newest
+        };
+        if (this.newest) {
+            this.newest.newer = entry;
+        }
+        this.newest = entry;
+        this.oldest = this.oldest || entry;
+        this.map.set(key, entry);
+        return entry.value;
+    };
+    Cache.prototype.clean = function () {
+        while (this.oldest && this.map.size > this.max) {
+            this.delete(this.oldest.key);
+        }
+    };
+    Cache.prototype.delete = function (key) {
+        var entry = this.map.get(key);
+        if (entry) {
+            if (entry === this.newest) {
+                this.newest = entry.older;
+            }
+            if (entry === this.oldest) {
+                this.oldest = entry.newer;
+            }
+            if (entry.newer) {
+                entry.newer.older = entry.older;
+            }
+            if (entry.older) {
+                entry.older.newer = entry.newer;
+            }
+            this.map.delete(key);
+            this.dispose(entry.value, key);
+            return true;
+        }
+        return false;
+    };
+    return Cache;
+}());
+
+var parentEntrySlot = new _wry_context__WEBPACK_IMPORTED_MODULE_0__["Slot"]();
+
+var reusableEmptyArray = [];
+var emptySetPool = [];
+var POOL_TARGET_SIZE = 100;
+// Since this package might be used browsers, we should avoid using the
+// Node built-in assert module.
+function assert(condition, optionalMessage) {
+    if (!condition) {
+        throw new Error(optionalMessage || "assertion failure");
+    }
+}
+function valueIs(a, b) {
+    var len = a.length;
+    return (
+    // Unknown values are not equal to each other.
+    len > 0 &&
+        // Both values must be ordinary (or both exceptional) to be equal.
+        len === b.length &&
+        // The underlying value or exception must be the same.
+        a[len - 1] === b[len - 1]);
+}
+function valueGet(value) {
+    switch (value.length) {
+        case 0: throw new Error("unknown value");
+        case 1: return value[0];
+        case 2: throw value[1];
+    }
+}
+function valueCopy(value) {
+    return value.slice(0);
+}
+var Entry = /** @class */ (function () {
+    function Entry(fn, args) {
+        this.fn = fn;
+        this.args = args;
+        this.parents = new Set();
+        this.childValues = new Map();
+        // When this Entry has children that are dirty, this property becomes
+        // a Set containing other Entry objects, borrowed from emptySetPool.
+        // When the set becomes empty, it gets recycled back to emptySetPool.
+        this.dirtyChildren = null;
+        this.dirty = true;
+        this.recomputing = false;
+        this.value = [];
+        ++Entry.count;
+    }
+    // This is the most important method of the Entry API, because it
+    // determines whether the cached this.value can be returned immediately,
+    // or must be recomputed. The overall performance of the caching system
+    // depends on the truth of the following observations: (1) this.dirty is
+    // usually false, (2) this.dirtyChildren is usually null/empty, and thus
+    // (3) valueGet(this.value) is usually returned without recomputation.
+    Entry.prototype.recompute = function () {
+        assert(!this.recomputing, "already recomputing");
+        if (!rememberParent(this) && maybeReportOrphan(this)) {
+            // The recipient of the entry.reportOrphan callback decided to dispose
+            // of this orphan entry by calling entry.dispose(), so we don't need to
+            // (and should not) proceed with the recomputation.
+            return void 0;
+        }
+        return mightBeDirty(this)
+            ? reallyRecompute(this)
+            : valueGet(this.value);
+    };
+    Entry.prototype.setDirty = function () {
+        if (this.dirty)
+            return;
+        this.dirty = true;
+        this.value.length = 0;
+        reportDirty(this);
+        // We can go ahead and unsubscribe here, since any further dirty
+        // notifications we receive will be redundant, and unsubscribing may
+        // free up some resources, e.g. file watchers.
+        maybeUnsubscribe(this);
+    };
+    Entry.prototype.dispose = function () {
+        var _this = this;
+        forgetChildren(this).forEach(maybeReportOrphan);
+        maybeUnsubscribe(this);
+        // Because this entry has been kicked out of the cache (in index.js),
+        // we've lost the ability to find out if/when this entry becomes dirty,
+        // whether that happens through a subscription, because of a direct call
+        // to entry.setDirty(), or because one of its children becomes dirty.
+        // Because of this loss of future information, we have to assume the
+        // worst (that this entry might have become dirty very soon), so we must
+        // immediately mark this entry's parents as dirty. Normally we could
+        // just call entry.setDirty() rather than calling parent.setDirty() for
+        // each parent, but that would leave this entry in parent.childValues
+        // and parent.dirtyChildren, which would prevent the child from being
+        // truly forgotten.
+        this.parents.forEach(function (parent) {
+            parent.setDirty();
+            forgetChild(parent, _this);
+        });
+    };
+    Entry.count = 0;
+    return Entry;
+}());
+function rememberParent(child) {
+    var parent = parentEntrySlot.getValue();
+    if (parent) {
+        child.parents.add(parent);
+        if (!parent.childValues.has(child)) {
+            parent.childValues.set(child, []);
+        }
+        if (mightBeDirty(child)) {
+            reportDirtyChild(parent, child);
+        }
+        else {
+            reportCleanChild(parent, child);
+        }
+        return parent;
+    }
+}
+function reallyRecompute(entry) {
+    // Since this recomputation is likely to re-remember some of this
+    // entry's children, we forget our children here but do not call
+    // maybeReportOrphan until after the recomputation finishes.
+    var originalChildren = forgetChildren(entry);
+    // Set entry as the parent entry while calling recomputeNewValue(entry).
+    parentEntrySlot.withValue(entry, recomputeNewValue, [entry]);
+    if (maybeSubscribe(entry)) {
+        // If we successfully recomputed entry.value and did not fail to
+        // (re)subscribe, then this Entry is no longer explicitly dirty.
+        setClean(entry);
+    }
+    // Now that we've had a chance to re-remember any children that were
+    // involved in the recomputation, we can safely report any orphan
+    // children that remain.
+    originalChildren.forEach(maybeReportOrphan);
+    return valueGet(entry.value);
+}
+function recomputeNewValue(entry) {
+    entry.recomputing = true;
+    // Set entry.value as unknown.
+    entry.value.length = 0;
+    try {
+        // If entry.fn succeeds, entry.value will become a normal Value.
+        entry.value[0] = entry.fn.apply(null, entry.args);
+    }
+    catch (e) {
+        // If entry.fn throws, entry.value will become exceptional.
+        entry.value[1] = e;
+    }
+    // Either way, this line is always reached.
+    entry.recomputing = false;
+}
+function mightBeDirty(entry) {
+    return entry.dirty || !!(entry.dirtyChildren && entry.dirtyChildren.size);
+}
+function setClean(entry) {
+    entry.dirty = false;
+    if (mightBeDirty(entry)) {
+        // This Entry may still have dirty children, in which case we can't
+        // let our parents know we're clean just yet.
+        return;
+    }
+    reportClean(entry);
+}
+function reportDirty(child) {
+    child.parents.forEach(function (
