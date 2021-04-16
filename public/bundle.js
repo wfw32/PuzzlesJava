@@ -31012,4 +31012,252 @@ function setClean(entry) {
     reportClean(entry);
 }
 function reportDirty(child) {
-    child.parents.forEach(function (
+    child.parents.forEach(function (parent) { return reportDirtyChild(parent, child); });
+}
+function reportClean(child) {
+    child.parents.forEach(function (parent) { return reportCleanChild(parent, child); });
+}
+// Let a parent Entry know that one of its children may be dirty.
+function reportDirtyChild(parent, child) {
+    // Must have called rememberParent(child) before calling
+    // reportDirtyChild(parent, child).
+    assert(parent.childValues.has(child));
+    assert(mightBeDirty(child));
+    if (!parent.dirtyChildren) {
+        parent.dirtyChildren = emptySetPool.pop() || new Set;
+    }
+    else if (parent.dirtyChildren.has(child)) {
+        // If we already know this child is dirty, then we must have already
+        // informed our own parents that we are dirty, so we can terminate
+        // the recursion early.
+        return;
+    }
+    parent.dirtyChildren.add(child);
+    reportDirty(parent);
+}
+// Let a parent Entry know that one of its children is no longer dirty.
+function reportCleanChild(parent, child) {
+    // Must have called rememberChild(child) before calling
+    // reportCleanChild(parent, child).
+    assert(parent.childValues.has(child));
+    assert(!mightBeDirty(child));
+    var childValue = parent.childValues.get(child);
+    if (childValue.length === 0) {
+        parent.childValues.set(child, valueCopy(child.value));
+    }
+    else if (!valueIs(childValue, child.value)) {
+        parent.setDirty();
+    }
+    removeDirtyChild(parent, child);
+    if (mightBeDirty(parent)) {
+        return;
+    }
+    reportClean(parent);
+}
+function removeDirtyChild(parent, child) {
+    var dc = parent.dirtyChildren;
+    if (dc) {
+        dc.delete(child);
+        if (dc.size === 0) {
+            if (emptySetPool.length < POOL_TARGET_SIZE) {
+                emptySetPool.push(dc);
+            }
+            parent.dirtyChildren = null;
+        }
+    }
+}
+// If the given entry has a reportOrphan method, and no remaining parents,
+// call entry.reportOrphan and return true iff it returns true. The
+// reportOrphan function should return true to indicate entry.dispose()
+// has been called, and the entry has been removed from any other caches
+// (see index.js for the only current example).
+function maybeReportOrphan(entry) {
+    return entry.parents.size === 0 &&
+        typeof entry.reportOrphan === "function" &&
+        entry.reportOrphan() === true;
+}
+// Removes all children from this entry and returns an array of the
+// removed children.
+function forgetChildren(parent) {
+    var children = reusableEmptyArray;
+    if (parent.childValues.size > 0) {
+        children = [];
+        parent.childValues.forEach(function (_value, child) {
+            forgetChild(parent, child);
+            children.push(child);
+        });
+    }
+    // After we forget all our children, this.dirtyChildren must be empty
+    // and therefore must have been reset to null.
+    assert(parent.dirtyChildren === null);
+    return children;
+}
+function forgetChild(parent, child) {
+    child.parents.delete(parent);
+    parent.childValues.delete(child);
+    removeDirtyChild(parent, child);
+}
+function maybeSubscribe(entry) {
+    if (typeof entry.subscribe === "function") {
+        try {
+            maybeUnsubscribe(entry); // Prevent double subscriptions.
+            entry.unsubscribe = entry.subscribe.apply(null, entry.args);
+        }
+        catch (e) {
+            // If this Entry has a subscribe function and it threw an exception
+            // (or an unsubscribe function it previously returned now throws),
+            // return false to indicate that we were not able to subscribe (or
+            // unsubscribe), and this Entry should remain dirty.
+            entry.setDirty();
+            return false;
+        }
+    }
+    // Returning true indicates either that there was no entry.subscribe
+    // function or that it succeeded.
+    return true;
+}
+function maybeUnsubscribe(entry) {
+    var unsubscribe = entry.unsubscribe;
+    if (typeof unsubscribe === "function") {
+        entry.unsubscribe = void 0;
+        unsubscribe();
+    }
+}
+
+// A trie data structure that holds object keys weakly, yet can also hold
+// non-object keys, unlike the native `WeakMap`.
+var KeyTrie = /** @class */ (function () {
+    function KeyTrie(weakness) {
+        this.weakness = weakness;
+    }
+    KeyTrie.prototype.lookup = function () {
+        var array = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            array[_i] = arguments[_i];
+        }
+        return this.lookupArray(array);
+    };
+    KeyTrie.prototype.lookupArray = function (array) {
+        var node = this;
+        array.forEach(function (key) { return node = node.getChildTrie(key); });
+        return node.data || (node.data = Object.create(null));
+    };
+    KeyTrie.prototype.getChildTrie = function (key) {
+        var map = this.weakness && isObjRef(key)
+            ? this.weak || (this.weak = new WeakMap())
+            : this.strong || (this.strong = new Map());
+        var child = map.get(key);
+        if (!child)
+            map.set(key, child = new KeyTrie(this.weakness));
+        return child;
+    };
+    return KeyTrie;
+}());
+function isObjRef(value) {
+    switch (typeof value) {
+        case "object":
+            if (value === null)
+                break;
+        // Fall through to return true...
+        case "function":
+            return true;
+    }
+    return false;
+}
+
+// The defaultMakeCacheKey function is remarkably powerful, because it gives
+// a unique object for any shallow-identical list of arguments. If you need
+// to implement a custom makeCacheKey function, you may find it helpful to
+// delegate the final work to defaultMakeCacheKey, which is why we export it
+// here. However, you may want to avoid defaultMakeCacheKey if your runtime
+// does not support WeakMap, or you have the ability to return a string key.
+// In those cases, just write your own custom makeCacheKey functions.
+var keyTrie = new KeyTrie(typeof WeakMap === "function");
+function defaultMakeCacheKey() {
+    var args = [];
+    for (var _i = 0; _i < arguments.length; _i++) {
+        args[_i] = arguments[_i];
+    }
+    return keyTrie.lookupArray(args);
+}
+var caches = new Set();
+function wrap(originalFunction, options) {
+    if (options === void 0) { options = Object.create(null); }
+    var cache = new Cache(options.max || Math.pow(2, 16), function (entry) { return entry.dispose(); });
+    var disposable = !!options.disposable;
+    var makeCacheKey = options.makeCacheKey || defaultMakeCacheKey;
+    function optimistic() {
+        if (disposable && !parentEntrySlot.hasValue()) {
+            // If there's no current parent computation, and this wrapped
+            // function is disposable (meaning we don't care about entry.value,
+            // just dependency tracking), then we can short-cut everything else
+            // in this function, because entry.recompute() is going to recycle
+            // the entry object without recomputing anything, anyway.
+            return void 0;
+        }
+        var key = makeCacheKey.apply(null, arguments);
+        if (key === void 0) {
+            return originalFunction.apply(null, arguments);
+        }
+        var args = Array.prototype.slice.call(arguments);
+        var entry = cache.get(key);
+        if (entry) {
+            entry.args = args;
+        }
+        else {
+            entry = new Entry(originalFunction, args);
+            cache.set(key, entry);
+            entry.subscribe = options.subscribe;
+            if (disposable) {
+                entry.reportOrphan = function () { return cache.delete(key); };
+            }
+        }
+        var value = entry.recompute();
+        // Move this entry to the front of the least-recently used queue,
+        // since we just finished computing its value.
+        cache.set(key, entry);
+        caches.add(cache);
+        // Clean up any excess entries in the cache, but only if there is no
+        // active parent entry, meaning we're not in the middle of a larger
+        // computation that might be flummoxed by the cleaning.
+        if (!parentEntrySlot.hasValue()) {
+            caches.forEach(function (cache) { return cache.clean(); });
+            caches.clear();
+        }
+        // If options.disposable is truthy, the caller of wrap is telling us
+        // they don't care about the result of entry.recompute(), so we should
+        // avoid returning the value, so it won't be accidentally used.
+        return disposable ? void 0 : value;
+    }
+    optimistic.dirty = function () {
+        var key = makeCacheKey.apply(null, arguments);
+        var child = key !== void 0 && cache.get(key);
+        if (child) {
+            child.setDirty();
+        }
+    };
+    return optimistic;
+}
+
+
+//# sourceMappingURL=bundle.esm.js.map
+
+
+/***/ }),
+
+/***/ "./node_modules/process/browser.js":
+/*!*****************************************!*\
+  !*** ./node_modules/process/browser.js ***!
+  \*****************************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+// shim for using process in browser
+var process = module.exports = {};
+
+// cached from whatever global is present so that test runners that stub it
+// don't break things.  But we need to wrap it in a try catch in case it is
+// wrapped in strict mode code which doesn't define any globals.  It's inside a
+// function because try/catches deoptimize in certain engines.
+
+var cachedSe
