@@ -32371,4 +32371,166 @@ var _a = Object.setPrototypeOf, setPrototypeOf = _a === void 0 ? function (obj, 
 var InvariantError = /** @class */ (function (_super) {
     Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__extends"])(InvariantError, _super);
     function InvariantError(message) {
-        if (messag
+        if (message === void 0) { message = genericMessage; }
+        var _this = _super.call(this, typeof message === "number"
+            ? genericMessage + ": " + message + " (see https://github.com/apollographql/invariant-packages)"
+            : message) || this;
+        _this.framesToPop = 1;
+        _this.name = genericMessage;
+        setPrototypeOf(_this, InvariantError.prototype);
+        return _this;
+    }
+    return InvariantError;
+}(Error));
+function invariant(condition, message) {
+    if (!condition) {
+        throw new InvariantError(message);
+    }
+}
+function wrapConsoleMethod(method) {
+    return function () {
+        return console[method].apply(console, arguments);
+    };
+}
+(function (invariant) {
+    invariant.warn = wrapConsoleMethod("warn");
+    invariant.error = wrapConsoleMethod("error");
+})(invariant || (invariant = {}));
+// Code that uses ts-invariant with rollup-plugin-invariant may want to
+// import this process stub to avoid errors evaluating process.env.NODE_ENV.
+// However, because most ESM-to-CJS compilers will rewrite the process import
+// as tsInvariant.process, which prevents proper replacement by minifiers, we
+// also attempt to define the stub globally when it is not already defined.
+var processStub = { env: {} };
+if (typeof process === "object") {
+    processStub = process;
+}
+else
+    try {
+        // Using Function to evaluate this assignment in global scope also escapes
+        // the strict mode of the current module, thereby allowing the assignment.
+        // Inspired by https://github.com/facebook/regenerator/pull/369.
+        Function("stub", "process = stub")(processStub);
+    }
+    catch (atLeastWeTried) {
+        // The assignment can fail if a Content Security Policy heavy-handedly
+        // forbids Function usage. In those environments, developers should take
+        // extra care to replace process.env.NODE_ENV in their production builds,
+        // or define an appropriate global.process polyfill.
+    }
+var invariant$1 = invariant;
+
+/* harmony default export */ __webpack_exports__["default"] = (invariant$1);
+
+//# sourceMappingURL=invariant.esm.js.map
+
+/* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(/*! ./../../../../process/browser.js */ "./node_modules/process/browser.js")))
+
+/***/ }),
+
+/***/ "./node_modules/react-apollo/react-apollo.esm.js":
+/*!*******************************************************!*\
+  !*** ./node_modules/react-apollo/react-apollo.esm.js ***!
+  \*******************************************************/
+/*! exports provided: ApolloConsumer, ApolloContext, ApolloProvider, Mutation, Query, RenderPromises, Subscription, compose, getDataFromTree, getMarkupFromTree, graphql, renderToStringWithData, withApollo, withMutation, withQuery, withSubscription */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ApolloConsumer", function() { return ApolloConsumer; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ApolloContext", function() { return ApolloContext; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ApolloProvider", function() { return ApolloProvider; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Mutation", function() { return Mutation; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Query", function() { return Query; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "RenderPromises", function() { return RenderPromises; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Subscription", function() { return Subscription; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "compose", function() { return compose; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "getDataFromTree", function() { return getDataFromTree; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "getMarkupFromTree", function() { return getMarkupFromTree; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "graphql", function() { return graphql; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "renderToStringWithData", function() { return renderToStringWithData; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "withApollo", function() { return withApollo; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "withMutation", function() { return withMutation; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "withQuery", function() { return withQuery; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "withSubscription", function() { return withSubscription; });
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var prop_types__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! prop-types */ "./node_modules/prop-types/index.js");
+/* harmony import */ var prop_types__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(prop_types__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var ts_invariant__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ts-invariant */ "./node_modules/react-apollo/node_modules/ts-invariant/lib/invariant.esm.js");
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! tslib */ "./node_modules/tslib/tslib.es6.js");
+/* harmony import */ var apollo_client__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! apollo-client */ "./node_modules/apollo-client/bundle.esm.js");
+/* harmony import */ var lodash_isequal__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! lodash.isequal */ "./node_modules/lodash.isequal/index.js");
+/* harmony import */ var lodash_isequal__WEBPACK_IMPORTED_MODULE_5___default = /*#__PURE__*/__webpack_require__.n(lodash_isequal__WEBPACK_IMPORTED_MODULE_5__);
+/* harmony import */ var hoist_non_react_statics__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! hoist-non-react-statics */ "./node_modules/hoist-non-react-statics/dist/hoist-non-react-statics.cjs.js");
+/* harmony import */ var hoist_non_react_statics__WEBPACK_IMPORTED_MODULE_6___default = /*#__PURE__*/__webpack_require__.n(hoist_non_react_statics__WEBPACK_IMPORTED_MODULE_6__);
+
+
+
+
+
+
+
+
+var ApolloContext = react__WEBPACK_IMPORTED_MODULE_0__["createContext"] &&
+    Object(react__WEBPACK_IMPORTED_MODULE_0__["createContext"])(undefined);
+
+var ApolloConsumer = function (props, legacyContext) {
+    function finish(context) {
+        if (!context || !context.client) {
+            throw  false ? undefined : new ts_invariant__WEBPACK_IMPORTED_MODULE_2__["InvariantError"]('Could not find "client" in the context of ApolloConsumer. ' +
+                'Wrap the root component in an <ApolloProvider>.');
+        }
+        return props.children(context.client);
+    }
+    return ApolloContext ? (Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(ApolloContext.Consumer, null, finish)) : (finish(legacyContext));
+};
+ApolloConsumer.contextTypes = {
+    client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"].isRequired,
+};
+ApolloConsumer.propTypes = {
+    children: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"].isRequired,
+};
+
+var ApolloProvider = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__extends"])(ApolloProvider, _super);
+    function ApolloProvider(props, context) {
+        var _this = _super.call(this, props, context) || this;
+        _this.operations = new Map();
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(props.client, 'ApolloProvider was not passed a client instance. Make ' +
+            'sure you pass in your client via the "client" prop.');
+        if (!props.client.__operations_cache__) {
+            props.client.__operations_cache__ = _this.operations;
+        }
+        return _this;
+    }
+    ApolloProvider.prototype.getChildContext = function () {
+        return {
+            client: this.props.client,
+            operations: this.props.client.__operations_cache__,
+        };
+    };
+    ApolloProvider.prototype.render = function () {
+        return ApolloContext ? (Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(ApolloContext.Provider, { value: this.getChildContext() }, this.props.children)) : (this.props.children);
+    };
+    ApolloProvider.propTypes = {
+        client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"].isRequired,
+        children: prop_types__WEBPACK_IMPORTED_MODULE_1__["node"].isRequired,
+    };
+    ApolloProvider.childContextTypes = {
+        client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"].isRequired,
+        operations: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+    };
+    return ApolloProvider;
+}(react__WEBPACK_IMPORTED_MODULE_0__["Component"]));
+
+var DocumentType;
+(function (DocumentType) {
+    DocumentType[DocumentType["Query"] = 0] = "Query";
+    DocumentType[DocumentType["Mutation"] = 1] = "Mutation";
+    DocumentType[DocumentType["Subscription"] = 2] = "Subscription";
+})(DocumentType || (DocumentType = {}));
+var cache = new Map();
+function parser(document) {
+    var cached = cache.get(document);
+    i
