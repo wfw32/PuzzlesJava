@@ -32533,4 +32533,196 @@ var DocumentType;
 var cache = new Map();
 function parser(document) {
     var cached = cache.get(document);
-    i
+    if (cached)
+        return cached;
+    var variables, type, name;
+     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(!!document && !!document.kind, "Argument of " + document + " passed to parser was not a valid GraphQL " +
+        "DocumentNode. You may need to use 'graphql-tag' or another method " +
+        "to convert your operation into a document");
+    var fragments = document.definitions.filter(function (x) { return x.kind === 'FragmentDefinition'; });
+    var queries = document.definitions.filter(function (x) { return x.kind === 'OperationDefinition' && x.operation === 'query'; });
+    var mutations = document.definitions.filter(function (x) { return x.kind === 'OperationDefinition' && x.operation === 'mutation'; });
+    var subscriptions = document.definitions.filter(function (x) { return x.kind === 'OperationDefinition' && x.operation === 'subscription'; });
+     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(!fragments.length || (queries.length || mutations.length || subscriptions.length), "Passing only a fragment to 'graphql' is not yet supported. " +
+        "You must include a query, subscription or mutation as well");
+     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(queries.length + mutations.length + subscriptions.length <= 1, "react-apollo only supports a query, subscription, or a mutation per HOC. " +
+        (document + " had " + queries.length + " queries, " + subscriptions.length + " ") +
+        ("subscriptions and " + mutations.length + " mutations. ") +
+        "You can use 'compose' to join multiple operation types to a component");
+    type = queries.length ? DocumentType.Query : DocumentType.Mutation;
+    if (!queries.length && !mutations.length)
+        type = DocumentType.Subscription;
+    var definitions = queries.length ? queries : mutations.length ? mutations : subscriptions;
+     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(definitions.length === 1, "react-apollo only supports one definition per HOC. " + document + " had " +
+        (definitions.length + " definitions. ") +
+        "You can use 'compose' to join multiple operation types to a component");
+    var definition = definitions[0];
+    variables = definition.variableDefinitions || [];
+    if (definition.name && definition.name.kind === 'Name') {
+        name = definition.name.value;
+    }
+    else {
+        name = 'data';
+    }
+    var payload = { name: name, type: type, variables: variables };
+    cache.set(document, payload);
+    return payload;
+}
+
+function getClient(props, context) {
+    var client = props.client || context.client;
+     false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(!!client, 'Could not find "client" in the context or passed in as a prop. ' +
+        'Wrap the root component in an <ApolloProvider>, or pass an ' +
+        'ApolloClient instance in via props.');
+    return client;
+}
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+function is(x, y) {
+    if (x === y) {
+        return x !== 0 || y !== 0 || 1 / x === 1 / y;
+    }
+    return x !== x && y !== y;
+}
+function isObject(obj) {
+    return obj !== null && typeof obj === "object";
+}
+function shallowEqual(objA, objB) {
+    if (is(objA, objB)) {
+        return true;
+    }
+    if (!isObject(objA) || !isObject(objB)) {
+        return false;
+    }
+    var keys = Object.keys(objA);
+    if (keys.length !== Object.keys(objB).length) {
+        return false;
+    }
+    return keys.every(function (key) { return hasOwnProperty.call(objB, key) && is(objA[key], objB[key]); });
+}
+
+function observableQueryFields(observable) {
+    var fields = {
+        variables: observable.variables,
+        refetch: observable.refetch.bind(observable),
+        fetchMore: observable.fetchMore.bind(observable),
+        updateQuery: observable.updateQuery.bind(observable),
+        startPolling: observable.startPolling.bind(observable),
+        stopPolling: observable.stopPolling.bind(observable),
+        subscribeToMore: observable.subscribeToMore.bind(observable),
+    };
+    return fields;
+}
+var Query = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__extends"])(Query, _super);
+    function Query(props, context) {
+        var _this = _super.call(this, props, context) || this;
+        _this.hasMounted = false;
+        _this.lastRenderedResult = null;
+        _this.startQuerySubscription = function () {
+            if (_this.querySubscription)
+                return;
+            _this.querySubscription = _this.queryObservable.subscribe({
+                next: function (result) {
+                    if (_this.lastRenderedResult &&
+                        _this.lastRenderedResult.loading === result.loading &&
+                        _this.lastRenderedResult.networkStatus === result.networkStatus &&
+                        shallowEqual(_this.lastRenderedResult.data, result.data)) {
+                        return;
+                    }
+                    _this.updateCurrentData();
+                },
+                error: function (error) {
+                    _this.resubscribeToQuery();
+                    if (!error.hasOwnProperty('graphQLErrors'))
+                        throw error;
+                    _this.updateCurrentData();
+                },
+            });
+        };
+        _this.removeQuerySubscription = function () {
+            if (_this.querySubscription) {
+                _this.querySubscription.unsubscribe();
+                delete _this.lastRenderedResult;
+                delete _this.querySubscription;
+            }
+        };
+        _this.updateCurrentData = function () {
+            _this.handleErrorOrCompleted();
+            if (_this.hasMounted)
+                _this.forceUpdate();
+        };
+        _this.handleErrorOrCompleted = function () {
+            var result = _this.queryObservable.currentResult();
+            var data = result.data, loading = result.loading, error = result.error;
+            var _a = _this.props, onCompleted = _a.onCompleted, onError = _a.onError;
+            if (onCompleted && !loading && !error) {
+                onCompleted(data);
+            }
+            else if (onError && !loading && error) {
+                onError(error);
+            }
+        };
+        _this.getQueryResult = function () {
+            var result = { data: Object.create(null) };
+            Object.assign(result, observableQueryFields(_this.queryObservable));
+            if (_this.props.skip) {
+                result = Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, result, { data: undefined, error: undefined, loading: false });
+            }
+            else {
+                var currentResult = _this.queryObservable.currentResult();
+                var loading = currentResult.loading, partial = currentResult.partial, networkStatus = currentResult.networkStatus, errors = currentResult.errors;
+                var error = currentResult.error;
+                if (errors && errors.length > 0) {
+                    error = new apollo_client__WEBPACK_IMPORTED_MODULE_4__["ApolloError"]({ graphQLErrors: errors });
+                }
+                var fetchPolicy = _this.queryObservable.options.fetchPolicy;
+                Object.assign(result, { loading: loading, networkStatus: networkStatus, error: error });
+                var previousData = _this.lastRenderedResult ? _this.lastRenderedResult.data : {};
+                if (loading) {
+                    Object.assign(result.data, previousData, currentResult.data);
+                }
+                else if (error) {
+                    Object.assign(result, {
+                        data: (_this.queryObservable.getLastResult() || {}).data,
+                    });
+                }
+                else if (fetchPolicy === 'no-cache' &&
+                    Object.keys(currentResult.data).length === 0) {
+                    result.data = previousData;
+                }
+                else {
+                    var partialRefetch = _this.props.partialRefetch;
+                    if (partialRefetch &&
+                        currentResult.data !== null &&
+                        typeof currentResult.data === 'object' &&
+                        Object.keys(currentResult.data).length === 0 &&
+                        partial &&
+                        fetchPolicy !== 'cache-only') {
+                        Object.assign(result, { loading: true, networkStatus: apollo_client__WEBPACK_IMPORTED_MODULE_4__["NetworkStatus"].loading });
+                        result.refetch();
+                        _this.lastRenderedResult = result;
+                        return result;
+                    }
+                    Object.assign(result.data, currentResult.data);
+                }
+            }
+            if (!_this.querySubscription) {
+                var oldRefetch_1 = result.refetch;
+                result.refetch = function (args) {
+                    if (_this.querySubscription) {
+                        return oldRefetch_1(args);
+                    }
+                    else {
+                        return new Promise(function (r, f) {
+                            _this.refetcherQueue = { resolve: r, reject: f, args: args };
+                        });
+                    }
+                };
+            }
+            setTimeout(function () {
+                if (_this.queryObservable.resetQueryStoreErrors) {
+                    _this.queryObservable.resetQueryStoreErrors();
+                }
+                else {
+                    var _a = _this.queryObservable, queryManager = _a.queryManager, queryI
