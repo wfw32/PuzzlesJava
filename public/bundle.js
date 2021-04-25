@@ -32725,4 +32725,202 @@ var Query = (function (_super) {
                     _this.queryObservable.resetQueryStoreErrors();
                 }
                 else {
-                    var _a = _this.queryObservable, queryManager = _a.queryManager, queryI
+                    var _a = _this.queryObservable, queryManager = _a.queryManager, queryId = _a.queryId;
+                    var queryStore = queryManager.queryStore.get(queryId);
+                    if (queryStore) {
+                        queryStore.networkError = null;
+                        queryStore.graphQLErrors = [];
+                    }
+                }
+            });
+            result.client = _this.client;
+            _this.lastRenderedResult = result;
+            return result;
+        };
+        _this.client = getClient(props, context);
+        _this.initializeQueryObservable(props);
+        return _this;
+    }
+    Query.prototype.fetchData = function () {
+        if (this.props.skip)
+            return false;
+        var _a = this.props, children = _a.children, ssr = _a.ssr, displayName = _a.displayName, skip = _a.skip, client = _a.client, onCompleted = _a.onCompleted, onError = _a.onError, partialRefetch = _a.partialRefetch, opts = Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__rest"])(_a, ["children", "ssr", "displayName", "skip", "client", "onCompleted", "onError", "partialRefetch"]);
+        var fetchPolicy = opts.fetchPolicy;
+        if (ssr === false)
+            return false;
+        if (fetchPolicy === 'network-only' || fetchPolicy === 'cache-and-network') {
+            fetchPolicy = 'cache-first';
+        }
+        var observable = this.client.watchQuery(Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, opts, { fetchPolicy: fetchPolicy }));
+        if (this.context && this.context.renderPromises) {
+            this.context.renderPromises.registerSSRObservable(this, observable);
+        }
+        var result = this.queryObservable.currentResult();
+        return result.loading ? observable.result() : false;
+    };
+    Query.prototype.componentDidMount = function () {
+        this.hasMounted = true;
+        if (this.props.skip)
+            return;
+        this.startQuerySubscription();
+        if (this.refetcherQueue) {
+            var _a = this.refetcherQueue, args = _a.args, resolve = _a.resolve, reject = _a.reject;
+            this.queryObservable.refetch(args)
+                .then(resolve)
+                .catch(reject);
+        }
+    };
+    Query.prototype.componentWillReceiveProps = function (nextProps, nextContext) {
+        if (nextProps.skip && !this.props.skip) {
+            this.queryObservable.resetLastResults();
+            this.removeQuerySubscription();
+            return;
+        }
+        var nextClient = getClient(nextProps, nextContext);
+        if (shallowEqual(this.props, nextProps) && this.client === nextClient) {
+            return;
+        }
+        if (this.client !== nextClient) {
+            this.client = nextClient;
+            this.removeQuerySubscription();
+            this.queryObservable = null;
+        }
+        if (this.props.query !== nextProps.query) {
+            this.queryObservable.resetLastResults();
+            this.removeQuerySubscription();
+        }
+        this.updateQuery(nextProps);
+        if (nextProps.skip)
+            return;
+        this.startQuerySubscription();
+    };
+    Query.prototype.componentWillUnmount = function () {
+        this.removeQuerySubscription();
+        this.hasMounted = false;
+    };
+    Query.prototype.componentDidUpdate = function (prevProps) {
+        var isDiffRequest = !lodash_isequal__WEBPACK_IMPORTED_MODULE_5___default()(prevProps.query, this.props.query) ||
+            !lodash_isequal__WEBPACK_IMPORTED_MODULE_5___default()(prevProps.variables, this.props.variables);
+        if (isDiffRequest) {
+            this.handleErrorOrCompleted();
+        }
+    };
+    Query.prototype.render = function () {
+        var _this = this;
+        var context = this.context;
+        var finish = function () { return _this.props.children(_this.getQueryResult()); };
+        if (context && context.renderPromises) {
+            return context.renderPromises.addQueryPromise(this, finish);
+        }
+        return finish();
+    };
+    Query.prototype.extractOptsFromProps = function (props) {
+        this.operation = parser(props.query);
+         false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(this.operation.type === DocumentType.Query, "The <Query /> component requires a graphql query, but got a " + (this.operation.type === DocumentType.Mutation ? 'mutation' : 'subscription') + ".");
+        var displayName = props.displayName || 'Query';
+        return Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, props, { displayName: displayName, context: props.context || {}, metadata: { reactComponent: { displayName: displayName } } });
+    };
+    Query.prototype.initializeQueryObservable = function (props) {
+        var opts = this.extractOptsFromProps(props);
+        this.setOperations(opts);
+        if (this.context && this.context.renderPromises) {
+            this.queryObservable = this.context.renderPromises.getSSRObservable(this);
+        }
+        if (!this.queryObservable) {
+            this.queryObservable = this.client.watchQuery(opts);
+        }
+    };
+    Query.prototype.setOperations = function (props) {
+        if (this.context.operations) {
+            this.context.operations.set(this.operation.name, {
+                query: props.query,
+                variables: props.variables,
+            });
+        }
+    };
+    Query.prototype.updateQuery = function (props) {
+        if (!this.queryObservable) {
+            this.initializeQueryObservable(props);
+        }
+        else {
+            this.setOperations(props);
+        }
+        this.queryObservable.setOptions(this.extractOptsFromProps(props))
+            .catch(function () { return null; });
+    };
+    Query.prototype.resubscribeToQuery = function () {
+        this.removeQuerySubscription();
+        var lastError = this.queryObservable.getLastError();
+        var lastResult = this.queryObservable.getLastResult();
+        this.queryObservable.resetLastResults();
+        this.startQuerySubscription();
+        Object.assign(this.queryObservable, { lastError: lastError, lastResult: lastResult });
+    };
+    Query.contextTypes = {
+        client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        operations: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        renderPromises: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+    };
+    Query.propTypes = {
+        client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        children: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"].isRequired,
+        fetchPolicy: prop_types__WEBPACK_IMPORTED_MODULE_1__["string"],
+        notifyOnNetworkStatusChange: prop_types__WEBPACK_IMPORTED_MODULE_1__["bool"],
+        onCompleted: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        onError: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        pollInterval: prop_types__WEBPACK_IMPORTED_MODULE_1__["number"],
+        query: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"].isRequired,
+        variables: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        ssr: prop_types__WEBPACK_IMPORTED_MODULE_1__["bool"],
+        partialRefetch: prop_types__WEBPACK_IMPORTED_MODULE_1__["bool"],
+        returnPartialData: prop_types__WEBPACK_IMPORTED_MODULE_1__["bool"],
+    };
+    return Query;
+}(react__WEBPACK_IMPORTED_MODULE_0__["Component"]));
+
+var initialState = {
+    loading: false,
+    called: false,
+    error: undefined,
+    data: undefined,
+};
+var Mutation = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__extends"])(Mutation, _super);
+    function Mutation(props, context) {
+        var _this = _super.call(this, props, context) || this;
+        _this.hasMounted = false;
+        _this.runMutation = function (options) {
+            if (options === void 0) { options = {}; }
+            _this.onMutationStart();
+            var mutationId = _this.generateNewMutationId();
+            return _this.mutate(options)
+                .then(function (response) {
+                _this.onMutationCompleted(response, mutationId);
+                return response;
+            })
+                .catch(function (e) {
+                _this.onMutationError(e, mutationId);
+                if (!_this.props.onError)
+                    throw e;
+            });
+        };
+        _this.mutate = function (options) {
+            var _a = _this.props, mutation = _a.mutation, variables = _a.variables, optimisticResponse = _a.optimisticResponse, update = _a.update, _b = _a.context, context = _b === void 0 ? {} : _b, _c = _a.awaitRefetchQueries, awaitRefetchQueries = _c === void 0 ? false : _c, fetchPolicy = _a.fetchPolicy;
+            var mutateOptions = Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, options);
+            var refetchQueries = mutateOptions.refetchQueries || _this.props.refetchQueries;
+            if (refetchQueries && refetchQueries.length && Array.isArray(refetchQueries)) {
+                refetchQueries = refetchQueries.map(function (x) {
+                    if (typeof x === 'string' && _this.context.operations)
+                        return _this.context.operations.get(x) || x;
+                    return x;
+                });
+                delete mutateOptions.refetchQueries;
+            }
+            var mutateVariables = Object.assign({}, variables, mutateOptions.variables);
+            delete mutateOptions.variables;
+            return _this.client.mutate(Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({ mutation: mutation,
+                optimisticResponse: optimisticResponse,
+                refetchQueries: refetchQueries,
+                awaitRefetchQueries: awaitRefetchQueries,
+                update: update,
+     
