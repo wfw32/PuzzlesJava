@@ -32923,4 +32923,224 @@ var Mutation = (function (_super) {
                 refetchQueries: refetchQueries,
                 awaitRefetchQueries: awaitRefetchQueries,
                 update: update,
-     
+                context: context,
+                fetchPolicy: fetchPolicy, variables: mutateVariables }, mutateOptions));
+        };
+        _this.onMutationStart = function () {
+            if (!_this.state.loading && !_this.props.ignoreResults) {
+                _this.setState({
+                    loading: true,
+                    error: undefined,
+                    data: undefined,
+                    called: true,
+                });
+            }
+        };
+        _this.onMutationCompleted = function (response, mutationId) {
+            var _a = _this.props, onCompleted = _a.onCompleted, ignoreResults = _a.ignoreResults;
+            var data = response.data, errors = response.errors;
+            var error = errors && errors.length > 0 ? new apollo_client__WEBPACK_IMPORTED_MODULE_4__["ApolloError"]({ graphQLErrors: errors }) : undefined;
+            var callOncomplete = function () { return (onCompleted ? onCompleted(data) : null); };
+            if (_this.hasMounted && _this.isMostRecentMutation(mutationId) && !ignoreResults) {
+                _this.setState({ loading: false, data: data, error: error }, callOncomplete);
+            }
+            else {
+                callOncomplete();
+            }
+        };
+        _this.onMutationError = function (error, mutationId) {
+            var onError = _this.props.onError;
+            var callOnError = function () { return (onError ? onError(error) : null); };
+            if (_this.hasMounted && _this.isMostRecentMutation(mutationId)) {
+                _this.setState({ loading: false, error: error }, callOnError);
+            }
+            else {
+                callOnError();
+            }
+        };
+        _this.generateNewMutationId = function () {
+            _this.mostRecentMutationId = _this.mostRecentMutationId + 1;
+            return _this.mostRecentMutationId;
+        };
+        _this.isMostRecentMutation = function (mutationId) {
+            return _this.mostRecentMutationId === mutationId;
+        };
+        _this.verifyDocumentIsMutation = function (mutation) {
+            var operation = parser(mutation);
+             false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(operation.type === DocumentType.Mutation, "The <Mutation /> component requires a graphql mutation, but got a " + (operation.type === DocumentType.Query ? 'query' : 'subscription') + ".");
+        };
+        _this.client = getClient(props, context);
+        _this.verifyDocumentIsMutation(props.mutation);
+        _this.mostRecentMutationId = 0;
+        _this.state = initialState;
+        return _this;
+    }
+    Mutation.prototype.componentDidMount = function () {
+        this.hasMounted = true;
+    };
+    Mutation.prototype.componentWillUnmount = function () {
+        this.hasMounted = false;
+    };
+    Mutation.prototype.componentWillReceiveProps = function (nextProps, nextContext) {
+        var nextClient = getClient(nextProps, nextContext);
+        if (shallowEqual(this.props, nextProps) && this.client === nextClient) {
+            return;
+        }
+        if (this.props.mutation !== nextProps.mutation) {
+            this.verifyDocumentIsMutation(nextProps.mutation);
+        }
+        if (this.client !== nextClient) {
+            this.client = nextClient;
+            this.setState(initialState);
+        }
+    };
+    Mutation.prototype.render = function () {
+        var children = this.props.children;
+        var _a = this.state, loading = _a.loading, data = _a.data, error = _a.error, called = _a.called;
+        var result = {
+            called: called,
+            loading: loading,
+            data: data,
+            error: error,
+            client: this.client,
+        };
+        return children(this.runMutation, result);
+    };
+    Mutation.contextTypes = {
+        client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        operations: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+    };
+    Mutation.propTypes = {
+        mutation: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"].isRequired,
+        variables: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        optimisticResponse: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        refetchQueries: Object(prop_types__WEBPACK_IMPORTED_MODULE_1__["oneOfType"])([
+            Object(prop_types__WEBPACK_IMPORTED_MODULE_1__["arrayOf"])(Object(prop_types__WEBPACK_IMPORTED_MODULE_1__["oneOfType"])([prop_types__WEBPACK_IMPORTED_MODULE_1__["string"], prop_types__WEBPACK_IMPORTED_MODULE_1__["object"]])),
+            prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        ]),
+        awaitRefetchQueries: prop_types__WEBPACK_IMPORTED_MODULE_1__["bool"],
+        update: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        children: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"].isRequired,
+        onCompleted: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        onError: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        fetchPolicy: prop_types__WEBPACK_IMPORTED_MODULE_1__["string"],
+    };
+    return Mutation;
+}(react__WEBPACK_IMPORTED_MODULE_0__["Component"]));
+
+var Subscription = (function (_super) {
+    Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__extends"])(Subscription, _super);
+    function Subscription(props, context) {
+        var _this = _super.call(this, props, context) || this;
+        _this.initialize = function (props) {
+            if (_this.queryObservable)
+                return;
+            _this.queryObservable = _this.client.subscribe({
+                query: props.subscription,
+                variables: props.variables,
+                fetchPolicy: props.fetchPolicy,
+            });
+        };
+        _this.startSubscription = function () {
+            if (_this.querySubscription)
+                return;
+            _this.querySubscription = _this.queryObservable.subscribe({
+                next: _this.updateCurrentData,
+                error: _this.updateError,
+                complete: _this.completeSubscription
+            });
+        };
+        _this.getInitialState = function () { return ({
+            loading: true,
+            error: undefined,
+            data: undefined,
+        }); };
+        _this.updateCurrentData = function (result) {
+            var _a = _this, client = _a.client, onSubscriptionData = _a.props.onSubscriptionData;
+            _this.setState({
+                data: result.data,
+                loading: false,
+                error: undefined,
+            });
+            if (onSubscriptionData)
+                onSubscriptionData({ client: client, subscriptionData: result });
+        };
+        _this.updateError = function (error) {
+            _this.setState({
+                error: error,
+                loading: false,
+            });
+        };
+        _this.completeSubscription = function () {
+            var onSubscriptionComplete = _this.props.onSubscriptionComplete;
+            if (onSubscriptionComplete)
+                onSubscriptionComplete();
+            _this.endSubscription();
+        };
+        _this.endSubscription = function () {
+            if (_this.querySubscription) {
+                _this.querySubscription.unsubscribe();
+                delete _this.querySubscription;
+            }
+        };
+        _this.client = getClient(props, context);
+        _this.initialize(props);
+        _this.state = _this.getInitialState();
+        return _this;
+    }
+    Subscription.prototype.componentDidMount = function () {
+        this.startSubscription();
+    };
+    Subscription.prototype.componentWillReceiveProps = function (nextProps, nextContext) {
+        var nextClient = getClient(nextProps, nextContext);
+        if (shallowEqual(this.props.variables, nextProps.variables) &&
+            this.client === nextClient &&
+            this.props.subscription === nextProps.subscription) {
+            return;
+        }
+        var shouldResubscribe = nextProps.shouldResubscribe;
+        if (typeof shouldResubscribe === 'function') {
+            shouldResubscribe = !!shouldResubscribe(this.props, nextProps);
+        }
+        var shouldNotResubscribe = shouldResubscribe === false;
+        if (this.client !== nextClient) {
+            this.client = nextClient;
+        }
+        if (!shouldNotResubscribe) {
+            this.endSubscription();
+            delete this.queryObservable;
+            this.initialize(nextProps);
+            this.startSubscription();
+            this.setState(this.getInitialState());
+            return;
+        }
+        this.initialize(nextProps);
+        this.startSubscription();
+    };
+    Subscription.prototype.componentWillUnmount = function () {
+        this.endSubscription();
+    };
+    Subscription.prototype.render = function () {
+        var renderFn = this.props.children;
+        if (!renderFn)
+            return null;
+        var result = Object.assign({}, this.state, {
+            variables: this.props.variables,
+        });
+        return renderFn(result);
+    };
+    Subscription.contextTypes = {
+        client: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+    };
+    Subscription.propTypes = {
+        subscription: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"].isRequired,
+        variables: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        children: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        onSubscriptionData: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        onSubscriptionComplete: prop_types__WEBPACK_IMPORTED_MODULE_1__["func"],
+        shouldResubscribe: Object(prop_types__WEBPACK_IMPORTED_MODULE_1__["oneOfType"])([prop_types__WEBPACK_IMPORTED_MODULE_1__["func"], prop_types__WEBPACK_IMPORTED_MODULE_1__["bool"]]),
+    };
+    return Subscription;
+}(react__WEBPACK_IMPORTED_MODULE_0__["Component"]));
+
+var defaultMapPropsToOptions = function () { r
