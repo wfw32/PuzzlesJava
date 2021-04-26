@@ -33318,4 +33318,200 @@ function withSubscription(document, operationOptions) {
                 _this.state = { resubscribe: false };
                 return _this;
             }
-    
+            GraphQL.prototype.componentWillReceiveProps = function (nextProps) {
+                if (!shouldResubscribe)
+                    return;
+                this.setState({
+                    resubscribe: shouldResubscribe(this.props, nextProps),
+                });
+            };
+            GraphQL.prototype.render = function () {
+                var _this = this;
+                var props = this.props;
+                var shouldSkip = mapPropsToSkip(props);
+                var opts = shouldSkip ? Object.create(null) : mapPropsToOptions(props);
+                if (!shouldSkip && !opts.variables && operation.variables.length > 0) {
+                    opts.variables = calculateVariablesFromProps(operation, props);
+                }
+                return (Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(Subscription, Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, opts, { displayName: graphQLDisplayName, skip: shouldSkip, subscription: document, shouldResubscribe: this.state.resubscribe }), function (_a) {
+                    var _b, _c;
+                    var data = _a.data, r = Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__rest"])(_a, ["data"]);
+                    if (operationOptions.withRef) {
+                        _this.withRef = true;
+                        props = Object.assign({}, props, {
+                            ref: _this.setWrappedInstance,
+                        });
+                    }
+                    if (shouldSkip) {
+                        return (Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(WrappedComponent, Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, props, {})));
+                    }
+                    var result = Object.assign(r, data || {});
+                    var name = operationOptions.name || 'data';
+                    var childProps = (_b = {}, _b[name] = result, _b);
+                    if (operationOptions.props) {
+                        var newResult = (_c = {},
+                            _c[name] = result,
+                            _c.ownProps = props,
+                            _c);
+                        lastResultProps = operationOptions.props(newResult, lastResultProps);
+                        childProps = lastResultProps;
+                    }
+                    return (Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(WrappedComponent, Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, props, childProps)));
+                }));
+            };
+            GraphQL.displayName = graphQLDisplayName;
+            GraphQL.WrappedComponent = WrappedComponent;
+            return GraphQL;
+        }(GraphQLBase));
+        return hoist_non_react_statics__WEBPACK_IMPORTED_MODULE_6___default()(GraphQL, WrappedComponent, {});
+    };
+}
+
+function graphql(document, operationOptions) {
+    if (operationOptions === void 0) { operationOptions = {}; }
+    switch (parser(document).type) {
+        case DocumentType.Mutation:
+            return withMutation(document, operationOptions);
+        case DocumentType.Subscription:
+            return withSubscription(document, operationOptions);
+        case DocumentType.Query:
+        default:
+            return withQuery(document, operationOptions);
+    }
+}
+
+function getDisplayName$1(WrappedComponent) {
+    return WrappedComponent.displayName || WrappedComponent.name || 'Component';
+}
+function withApollo(WrappedComponent, operationOptions) {
+    if (operationOptions === void 0) { operationOptions = {}; }
+    var withDisplayName = "withApollo(" + getDisplayName$1(WrappedComponent) + ")";
+    var WithApollo = (function (_super) {
+        Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__extends"])(WithApollo, _super);
+        function WithApollo(props) {
+            var _this = _super.call(this, props) || this;
+            _this.setWrappedInstance = _this.setWrappedInstance.bind(_this);
+            return _this;
+        }
+        WithApollo.prototype.getWrappedInstance = function () {
+             false ? undefined : Object(ts_invariant__WEBPACK_IMPORTED_MODULE_2__["invariant"])(operationOptions.withRef, "To access the wrapped instance, you need to specify " + "{ withRef: true } in the options");
+            return this.wrappedInstance;
+        };
+        WithApollo.prototype.setWrappedInstance = function (ref) {
+            this.wrappedInstance = ref;
+        };
+        WithApollo.prototype.render = function () {
+            var _this = this;
+            return (Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(ApolloConsumer, null, function (client) {
+                var props = Object.assign({}, _this.props, {
+                    client: client,
+                    ref: operationOptions.withRef ? _this.setWrappedInstance : undefined,
+                });
+                return Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(WrappedComponent, Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, props));
+            }));
+        };
+        WithApollo.displayName = withDisplayName;
+        WithApollo.WrappedComponent = WrappedComponent;
+        return WithApollo;
+    }(react__WEBPACK_IMPORTED_MODULE_0__["Component"]));
+    return hoist_non_react_statics__WEBPACK_IMPORTED_MODULE_6___default()(WithApollo, WrappedComponent, {});
+}
+
+function makeDefaultQueryInfo() {
+    return {
+        seen: false,
+        observable: null,
+    };
+}
+var RenderPromises = (function () {
+    function RenderPromises() {
+        this.queryPromises = new Map();
+        this.queryInfoTrie = new Map();
+    }
+    RenderPromises.prototype.registerSSRObservable = function (queryInstance, observable) {
+        this.lookupQueryInfo(queryInstance).observable = observable;
+    };
+    RenderPromises.prototype.getSSRObservable = function (queryInstance) {
+        return this.lookupQueryInfo(queryInstance).observable;
+    };
+    RenderPromises.prototype.addQueryPromise = function (queryInstance, finish) {
+        var info = this.lookupQueryInfo(queryInstance);
+        if (!info.seen) {
+            this.queryPromises.set(queryInstance, new Promise(function (resolve) {
+                resolve(queryInstance.fetchData());
+            }));
+            return null;
+        }
+        return finish();
+    };
+    RenderPromises.prototype.hasPromises = function () {
+        return this.queryPromises.size > 0;
+    };
+    RenderPromises.prototype.consumeAndAwaitPromises = function () {
+        var _this = this;
+        var promises = [];
+        this.queryPromises.forEach(function (promise, queryInstance) {
+            _this.lookupQueryInfo(queryInstance).seen = true;
+            promises.push(promise);
+        });
+        this.queryPromises.clear();
+        return Promise.all(promises);
+    };
+    RenderPromises.prototype.lookupQueryInfo = function (queryInstance) {
+        var queryInfoTrie = this.queryInfoTrie;
+        var _a = queryInstance.props, query = _a.query, variables = _a.variables;
+        var varMap = queryInfoTrie.get(query) || new Map();
+        if (!queryInfoTrie.has(query))
+            queryInfoTrie.set(query, varMap);
+        var variablesString = JSON.stringify(variables);
+        var info = varMap.get(variablesString) || makeDefaultQueryInfo();
+        if (!varMap.has(variablesString))
+            varMap.set(variablesString, info);
+        return info;
+    };
+    return RenderPromises;
+}());
+function getDataFromTree(tree, context) {
+    if (context === void 0) { context = {}; }
+    return getMarkupFromTree({
+        tree: tree,
+        context: context,
+        renderFunction: __webpack_require__(/*! react-dom/server */ "./node_modules/react-dom/server.browser.js").renderToStaticMarkup,
+    });
+}
+function getMarkupFromTree(_a) {
+    var tree = _a.tree, _b = _a.context, context = _b === void 0 ? {} : _b, _c = _a.renderFunction, renderFunction = _c === void 0 ? __webpack_require__(/*! react-dom/server */ "./node_modules/react-dom/server.browser.js").renderToStaticMarkup : _c;
+    var renderPromises = new RenderPromises();
+    var RenderPromisesProvider = (function (_super) {
+        Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__extends"])(RenderPromisesProvider, _super);
+        function RenderPromisesProvider() {
+            return _super !== null && _super.apply(this, arguments) || this;
+        }
+        RenderPromisesProvider.prototype.getChildContext = function () {
+            return Object(tslib__WEBPACK_IMPORTED_MODULE_3__["__assign"])({}, context, { renderPromises: renderPromises });
+        };
+        RenderPromisesProvider.prototype.render = function () {
+            return tree;
+        };
+        RenderPromisesProvider.childContextTypes = {
+            renderPromises: prop_types__WEBPACK_IMPORTED_MODULE_1__["object"],
+        };
+        return RenderPromisesProvider;
+    }(react__WEBPACK_IMPORTED_MODULE_0__["Component"]));
+    Object.keys(context).forEach(function (key) {
+        RenderPromisesProvider.childContextTypes[key] = prop_types__WEBPACK_IMPORTED_MODULE_1__["any"];
+    });
+    function process() {
+        var html = renderFunction(Object(react__WEBPACK_IMPORTED_MODULE_0__["createElement"])(RenderPromisesProvider));
+        return renderPromises.hasPromises()
+            ? renderPromises.consumeAndAwaitPromises().then(process)
+            : html;
+    }
+    return Promise.resolve().then(process);
+}
+
+function renderToStringWithData(component) {
+    return getMarkupFromTree({
+        tree: component,
+        renderFunction: __webpack_require__(/*! react-dom/server */ "./node_modules/react-dom/server.browser.js").renderToString,
+    });
