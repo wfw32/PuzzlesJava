@@ -34005,4 +34005,183 @@ var Alert = react__WEBPACK_IMPORTED_MODULE_3___default.a.forwardRef(function (un
   });
   var Transition = transition === true ? _Fade__WEBPACK_IMPORTED_MODULE_7__["default"] : transition;
   var alert = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement("div", Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
-    role
+    role: "alert"
+  }, Transition ? props : undefined, {
+    ref: ref,
+    className: classnames__WEBPACK_IMPORTED_MODULE_2___default()(className, prefix, variant && prefix + "-" + variant, dismissible && prefix + "-dismissible")
+  }), dismissible && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(_CloseButton__WEBPACK_IMPORTED_MODULE_8__["default"], {
+    onClick: handleClose,
+    label: closeLabel
+  }), children);
+  if (!Transition) return show ? alert : null;
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(Transition, Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
+    unmountOnExit: true
+  }, props, {
+    ref: undefined,
+    in: show
+  }), alert);
+});
+Alert.displayName = 'Alert';
+Alert.defaultProps = defaultProps;
+Alert.Link = AlertLink;
+Alert.Heading = AlertHeading;
+/* harmony default export */ __webpack_exports__["default"] = (Alert);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/Badge.js":
+/*!***************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/Badge.js ***!
+  \***************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/extends */ "./node_modules/@babel/runtime/helpers/esm/extends.js");
+/* harmony import */ var _babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/esm/objectWithoutPropertiesLoose */ "./node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! classnames */ "./node_modules/classnames/index.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(classnames__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_3__);
+/* harmony import */ var _ThemeProvider__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./ThemeProvider */ "./node_modules/react-bootstrap/esm/ThemeProvider.js");
+
+
+
+
+
+var defaultProps = {
+  pill: false
+};
+var Badge = react__WEBPACK_IMPORTED_MODULE_3___default.a.forwardRef(function (_ref, ref) {
+  var bsPrefix = _ref.bsPrefix,
+      variant = _ref.variant,
+      pill = _ref.pill,
+      className = _ref.className,
+      _ref$as = _ref.as,
+      Component = _ref$as === void 0 ? 'span' : _ref$as,
+      props = Object(_babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__["default"])(_ref, ["bsPrefix", "variant", "pill", "className", "as"]);
+
+  var prefix = Object(_ThemeProvider__WEBPACK_IMPORTED_MODULE_4__["useBootstrapPrefix"])(bsPrefix, 'badge');
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(Component, Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
+    ref: ref
+  }, props, {
+    className: classnames__WEBPACK_IMPORTED_MODULE_2___default()(className, prefix, pill && prefix + "-pill", variant && prefix + "-" + variant)
+  }));
+});
+Badge.displayName = 'Badge';
+Badge.defaultProps = defaultProps;
+/* harmony default export */ __webpack_exports__["default"] = (Badge);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/BootstrapModalManager.js":
+/*!*******************************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/BootstrapModalManager.js ***!
+  \*******************************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "default", function() { return BootstrapModalManager; });
+/* harmony import */ var _babel_runtime_helpers_esm_inheritsLoose__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/inheritsLoose */ "./node_modules/@babel/runtime/helpers/esm/inheritsLoose.js");
+/* harmony import */ var dom_helpers_css__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! dom-helpers/css */ "./node_modules/react-bootstrap/node_modules/dom-helpers/esm/css.js");
+/* harmony import */ var dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! dom-helpers/querySelectorAll */ "./node_modules/react-bootstrap/node_modules/dom-helpers/esm/querySelectorAll.js");
+/* harmony import */ var dom_helpers_scrollbarSize__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! dom-helpers/scrollbarSize */ "./node_modules/react-bootstrap/node_modules/dom-helpers/esm/scrollbarSize.js");
+/* harmony import */ var react_overlays_ModalManager__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! react-overlays/ModalManager */ "./node_modules/react-overlays/esm/ModalManager.js");
+
+
+
+
+
+var Selector = {
+  FIXED_CONTENT: '.fixed-top, .fixed-bottom, .is-fixed, .sticky-top',
+  STICKY_CONTENT: '.sticky-top',
+  NAVBAR_TOGGLER: '.navbar-toggler'
+};
+
+var BootstrapModalManager = /*#__PURE__*/function (_ModalManager) {
+  Object(_babel_runtime_helpers_esm_inheritsLoose__WEBPACK_IMPORTED_MODULE_0__["default"])(BootstrapModalManager, _ModalManager);
+
+  function BootstrapModalManager() {
+    return _ModalManager.apply(this, arguments) || this;
+  }
+
+  var _proto = BootstrapModalManager.prototype;
+
+  _proto.adjustAndStore = function adjustAndStore(prop, element, adjust) {
+    var _css;
+
+    var actual = element.style[prop]; // TODO: DOMStringMap and CSSStyleDeclaration aren't strictly compatible
+    // @ts-ignore
+
+    element.dataset[prop] = actual;
+    Object(dom_helpers_css__WEBPACK_IMPORTED_MODULE_1__["default"])(element, (_css = {}, _css[prop] = parseFloat(Object(dom_helpers_css__WEBPACK_IMPORTED_MODULE_1__["default"])(element, prop)) + adjust + "px", _css));
+  };
+
+  _proto.restore = function restore(prop, element) {
+    var value = element.dataset[prop];
+
+    if (value !== undefined) {
+      var _css2;
+
+      delete element.dataset[prop];
+      Object(dom_helpers_css__WEBPACK_IMPORTED_MODULE_1__["default"])(element, (_css2 = {}, _css2[prop] = value, _css2));
+    }
+  };
+
+  _proto.setContainerStyle = function setContainerStyle(containerState, container) {
+    var _this = this;
+
+    _ModalManager.prototype.setContainerStyle.call(this, containerState, container);
+
+    if (!containerState.overflowing) return;
+    var size = Object(dom_helpers_scrollbarSize__WEBPACK_IMPORTED_MODULE_3__["default"])();
+    Object(dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__["default"])(container, Selector.FIXED_CONTENT).forEach(function (el) {
+      return _this.adjustAndStore('paddingRight', el, size);
+    });
+    Object(dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__["default"])(container, Selector.STICKY_CONTENT).forEach(function (el) {
+      return _this.adjustAndStore('marginRight', el, -size);
+    });
+    Object(dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__["default"])(container, Selector.NAVBAR_TOGGLER).forEach(function (el) {
+      return _this.adjustAndStore('marginRight', el, size);
+    });
+  };
+
+  _proto.removeContainerStyle = function removeContainerStyle(containerState, container) {
+    var _this2 = this;
+
+    _ModalManager.prototype.removeContainerStyle.call(this, containerState, container);
+
+    Object(dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__["default"])(container, Selector.FIXED_CONTENT).forEach(function (el) {
+      return _this2.restore('paddingRight', el);
+    });
+    Object(dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__["default"])(container, Selector.STICKY_CONTENT).forEach(function (el) {
+      return _this2.restore('marginRight', el);
+    });
+    Object(dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_2__["default"])(container, Selector.NAVBAR_TOGGLER).forEach(function (el) {
+      return _this2.restore('marginRight', el);
+    });
+  };
+
+  return BootstrapModalManager;
+}(react_overlays_ModalManager__WEBPACK_IMPORTED_MODULE_4__["default"]);
+
+
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/Breadcrumb.js":
+/*!********************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/Breadcrumb.js ***!
+  \********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/extends */ "./node_modules/@babel/runtime/helpers/esm/extends.js");
+/* harmony import */ var _babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/esm/objectWithoutPropertiesLoose */ "./node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! classnames */ "./node_modules/classnames/index.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(classnames__WEBPACK_IMPORTED_M
