@@ -34519,4 +34519,157 @@ var Card = react__WEBPACK_IMPORTED_MODULE_3___default.a.forwardRef(function (_re
   }, [prefix]);
   return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(_CardContext__WEBPACK_IMPORTED_MODULE_7__["default"].Provider, {
     value: cardContext
-  }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(Component, Object(_babe
+  }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(Component, Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
+    ref: ref
+  }, props, {
+    className: classnames__WEBPACK_IMPORTED_MODULE_2___default()(className, prefix, bg && "bg-" + bg, text && "text-" + text, border && "border-" + border)
+  }), body ?
+  /*#__PURE__*/
+  // @ts-ignore
+  react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(CardBody, null, children) : children));
+});
+Card.displayName = 'Card';
+Card.defaultProps = defaultProps;
+Card.Img = _CardImg__WEBPACK_IMPORTED_MODULE_8__["default"];
+Card.Title = CardTitle;
+Card.Subtitle = CardSubtitle;
+Card.Body = CardBody;
+Card.Link = CardLink;
+Card.Text = CardText;
+Card.Header = CardHeader;
+Card.Footer = CardFooter;
+Card.ImgOverlay = CardImgOverlay;
+/* harmony default export */ __webpack_exports__["default"] = (Card);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/CardColumns.js":
+/*!*********************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/CardColumns.js ***!
+  \*********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./createWithBsPrefix */ "./node_modules/react-bootstrap/esm/createWithBsPrefix.js");
+
+/* harmony default export */ __webpack_exports__["default"] = (Object(_createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__["default"])('card-columns'));
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/CardContext.js":
+/*!*********************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/CardContext.js ***!
+  \*********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+
+var context = react__WEBPACK_IMPORTED_MODULE_0___default.a.createContext(null);
+context.displayName = 'CardContext';
+/* harmony default export */ __webpack_exports__["default"] = (context);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/CardDeck.js":
+/*!******************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/CardDeck.js ***!
+  \******************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./createWithBsPrefix */ "./node_modules/react-bootstrap/esm/createWithBsPrefix.js");
+
+/* harmony default export */ __webpack_exports__["default"] = (Object(_createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__["default"])('card-deck'));
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/CardGroup.js":
+/*!*******************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/CardGroup.js ***!
+  \*******************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./createWithBsPrefix */ "./node_modules/react-bootstrap/esm/createWithBsPrefix.js");
+
+/* harmony default export */ __webpack_exports__["default"] = (Object(_createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__["default"])('card-group'));
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/CardImg.js":
+/*!*****************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/CardImg.js ***!
+  \*****************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/extends */ "./node_modules/@babel/runtime/helpers/esm/extends.js");
+/* harmony import */ var _babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/esm/objectWithoutPropertiesLoose */ "./node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! classnames */ "./node_modules/classnames/index.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(classnames__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_3__);
+/* harmony import */ var _ThemeProvider__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./ThemeProvider */ "./node_modules/react-bootstrap/esm/ThemeProvider.js");
+
+
+
+
+
+var defaultProps = {
+  variant: null
+};
+var CardImg = react__WEBPACK_IMPORTED_MODULE_3___default.a.forwardRef( // Need to define the default "as" during prop destructuring to be compatible with styled-components github.com/react-bootstrap/react-bootstrap/issues/3595
+function (_ref, ref) {
+  var bsPrefix = _ref.bsPrefix,
+      className = _ref.className,
+      variant = _ref.variant,
+      _ref$as = _ref.as,
+      Component = _ref$as === void 0 ? 'img' : _ref$as,
+      props = Object(_babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__["default"])(_ref, ["bsPrefix", "className", "variant", "as"]);
+
+  var prefix = Object(_ThemeProvider__WEBPACK_IMPORTED_MODULE_4__["useBootstrapPrefix"])(bsPrefix, 'card-img');
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(Component, Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
+    ref: ref,
+    className: classnames__WEBPACK_IMPORTED_MODULE_2___default()(variant ? prefix + "-" + variant : prefix, className)
+  }, props));
+});
+CardImg.displayName = 'CardImg';
+CardImg.defaultProps = defaultProps;
+/* harmony default export */ __webpack_exports__["default"] = (CardImg);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/Carousel.js":
+/*!******************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/Carousel.js ***!
+  \******************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/extends */ "./node_modules/@babel/runtime/helpers/esm/extends.js");
+/* harmony import */ var _babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/esm/objectWithoutPropertiesLoose */ "./node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js");
+/* harmony import */ var _restart_hooks_useEventCallback__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @restart/hooks/useEventCallback */ "./node_modules/@restart/hooks/esm/useEventCallback.js");
+/* harmony import */ var _restart_hooks_useUpdateEffect__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! @restart/hooks/useUpdateEffect */ "./node_modules/@restart/hooks/esm/useUpdateEffect.js");
+/* harmony import */ var _restart_hooks_useCommittedRef__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @restart/hooks/useCommittedRef */ "./node_modules/@restart/hooks/esm/useCommittedRef.js");
+/* harmony import */ var _restart_hooks_useTimeout__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @restart/hooks/useTimeout */ "./node_modules/@restart/hooks/esm/useTimeout.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! classnames */ "./node_modules/classnames/index.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_6___default = /*#__PURE__*/__webpack_require__.n(classnames__WEBPACK_IMPORTED_MODULE_6__);
+/* harmony import */ var dom_helpers_transitionEnd__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! dom-helpers/transitionEnd */ "./node_modules/react-bootstrap/node_modules/dom-helpers/esm/transitionEnd.js");
+/* harmony import */ var react_transition_group_Transition__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! react-transition-group/Transition */ "./node_modules/react-bootstrap/node_modules/react-transition-group/esm/Transition.js");
+/* harmony import */ var prop_types__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! prop-types */ "./node_modules/prop-types/index.js");
+/* harmony import */ var prop_types__WEBPACK_IMPORTED_MODULE_9___default = /*#__PURE__*/__webpack_require__.n(prop_types__WEBPACK_IMPORTED_MODULE_9__);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! rea
