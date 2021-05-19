@@ -38670,4 +38670,210 @@ function Overlay(_ref) {
       state: state,
       scheduleUpdate: update,
       placement: placement,
-      outOfBo
+      outOfBoundaries: (state == null ? void 0 : (_state$modifiersData$ = state.modifiersData.hide) == null ? void 0 : _state$modifiersData$.isReferenceHidden) || false
+    });
+    if (typeof overlay === 'function') return overlay(Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({}, props, {}, overlayProps, {
+      placement: placement,
+      show: show,
+      popper: popper,
+      arrowProps: arrowProps
+    }));
+    return react__WEBPACK_IMPORTED_MODULE_2___default.a.cloneElement(overlay, Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({}, props, {}, overlayProps, {
+      placement: placement,
+      arrowProps: arrowProps,
+      popper: popper,
+      className: classnames__WEBPACK_IMPORTED_MODULE_3___default()(overlay.props.className, !transition && show && 'show'),
+      style: Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({}, overlay.props.style, {}, overlayProps.style)
+    }));
+  });
+}
+
+Overlay.defaultProps = defaultProps;
+/* harmony default export */ __webpack_exports__["default"] = (Overlay);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/OverlayTrigger.js":
+/*!************************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/OverlayTrigger.js ***!
+  \************************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/extends */ "./node_modules/@babel/runtime/helpers/esm/extends.js");
+/* harmony import */ var _babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/esm/objectWithoutPropertiesLoose */ "./node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js");
+/* harmony import */ var _babel_runtime_helpers_esm_inheritsLoose__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @babel/runtime/helpers/esm/inheritsLoose */ "./node_modules/@babel/runtime/helpers/esm/inheritsLoose.js");
+/* harmony import */ var dom_helpers_contains__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! dom-helpers/contains */ "./node_modules/react-bootstrap/node_modules/dom-helpers/esm/contains.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_4___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_4__);
+/* harmony import */ var _restart_hooks_useTimeout__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @restart/hooks/useTimeout */ "./node_modules/@restart/hooks/esm/useTimeout.js");
+/* harmony import */ var react_overlays_safeFindDOMNode__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! react-overlays/safeFindDOMNode */ "./node_modules/react-overlays/esm/safeFindDOMNode.js");
+/* harmony import */ var warning__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! warning */ "./node_modules/warning/warning.js");
+/* harmony import */ var warning__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(warning__WEBPACK_IMPORTED_MODULE_7__);
+/* harmony import */ var uncontrollable__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! uncontrollable */ "./node_modules/uncontrollable/esm/index.js");
+/* harmony import */ var _Overlay__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ./Overlay */ "./node_modules/react-bootstrap/esm/Overlay.js");
+
+
+
+
+
+
+
+
+
+
+
+var RefHolder = /*#__PURE__*/function (_React$Component) {
+  Object(_babel_runtime_helpers_esm_inheritsLoose__WEBPACK_IMPORTED_MODULE_2__["default"])(RefHolder, _React$Component);
+
+  function RefHolder() {
+    return _React$Component.apply(this, arguments) || this;
+  }
+
+  var _proto = RefHolder.prototype;
+
+  _proto.render = function render() {
+    return this.props.children;
+  };
+
+  return RefHolder;
+}(react__WEBPACK_IMPORTED_MODULE_4___default.a.Component);
+
+function normalizeDelay(delay) {
+  return delay && typeof delay === 'object' ? delay : {
+    show: delay,
+    hide: delay
+  };
+} // Simple implementation of mouseEnter and mouseLeave.
+// React's built version is broken: https://github.com/facebook/react/issues/4251
+// for cases when the trigger is disabled and mouseOut/Over can cause flicker
+// moving from one child element to another.
+
+
+function handleMouseOverOut(handler, args, relatedNative) {
+  var e = args[0];
+  var target = e.currentTarget;
+  var related = e.relatedTarget || e.nativeEvent[relatedNative];
+
+  if ((!related || related !== target) && !Object(dom_helpers_contains__WEBPACK_IMPORTED_MODULE_3__["default"])(target, related)) {
+    handler.apply(void 0, args);
+  }
+}
+
+var defaultProps = {
+  defaultShow: false,
+  trigger: ['hover', 'focus']
+};
+
+function OverlayTrigger(_ref) {
+  var trigger = _ref.trigger,
+      overlay = _ref.overlay,
+      children = _ref.children,
+      _ref$popperConfig = _ref.popperConfig,
+      popperConfig = _ref$popperConfig === void 0 ? {} : _ref$popperConfig,
+      propsShow = _ref.show,
+      _ref$defaultShow = _ref.defaultShow,
+      defaultShow = _ref$defaultShow === void 0 ? false : _ref$defaultShow,
+      onToggle = _ref.onToggle,
+      propsDelay = _ref.delay,
+      placement = _ref.placement,
+      _ref$flip = _ref.flip,
+      flip = _ref$flip === void 0 ? placement && placement.indexOf('auto') !== -1 : _ref$flip,
+      props = Object(_babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__["default"])(_ref, ["trigger", "overlay", "children", "popperConfig", "show", "defaultShow", "onToggle", "delay", "placement", "flip"]);
+
+  var triggerNodeRef = Object(react__WEBPACK_IMPORTED_MODULE_4__["useRef"])(null);
+  var timeout = Object(_restart_hooks_useTimeout__WEBPACK_IMPORTED_MODULE_5__["default"])();
+  var hoverStateRef = Object(react__WEBPACK_IMPORTED_MODULE_4__["useRef"])('');
+
+  var _useUncontrolledProp = Object(uncontrollable__WEBPACK_IMPORTED_MODULE_8__["useUncontrolledProp"])(propsShow, defaultShow, onToggle),
+      show = _useUncontrolledProp[0],
+      setShow = _useUncontrolledProp[1];
+
+  var delay = normalizeDelay(propsDelay);
+
+  var _ref2 = typeof children !== 'function' ? react__WEBPACK_IMPORTED_MODULE_4___default.a.Children.only(children).props : {},
+      onFocus = _ref2.onFocus,
+      onBlur = _ref2.onBlur,
+      onClick = _ref2.onClick;
+
+  var getTarget = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    return Object(react_overlays_safeFindDOMNode__WEBPACK_IMPORTED_MODULE_6__["default"])(triggerNodeRef.current);
+  }, []);
+  var handleShow = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    timeout.clear();
+    hoverStateRef.current = 'show';
+
+    if (!delay.show) {
+      setShow(true);
+      return;
+    }
+
+    timeout.set(function () {
+      if (hoverStateRef.current === 'show') setShow(true);
+    }, delay.show);
+  }, [delay.show, setShow, timeout]);
+  var handleHide = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    timeout.clear();
+    hoverStateRef.current = 'hide';
+
+    if (!delay.hide) {
+      setShow(false);
+      return;
+    }
+
+    timeout.set(function () {
+      if (hoverStateRef.current === 'hide') setShow(false);
+    }, delay.hide);
+  }, [delay.hide, setShow, timeout]);
+  var handleFocus = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    handleShow();
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    onFocus == null ? void 0 : onFocus.apply(void 0, args);
+  }, [handleShow, onFocus]);
+  var handleBlur = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    handleHide();
+
+    for (var _len2 = arguments.length, args = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+      args[_key2] = arguments[_key2];
+    }
+
+    onBlur == null ? void 0 : onBlur.apply(void 0, args);
+  }, [handleHide, onBlur]);
+  var handleClick = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    setShow(!show);
+    if (onClick) onClick.apply(void 0, arguments);
+  }, [onClick, setShow, show]);
+  var handleMouseOver = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    for (var _len3 = arguments.length, args = new Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+      args[_key3] = arguments[_key3];
+    }
+
+    handleMouseOverOut(handleShow, args, 'fromElement');
+  }, [handleShow]);
+  var handleMouseOut = Object(react__WEBPACK_IMPORTED_MODULE_4__["useCallback"])(function () {
+    for (var _len4 = arguments.length, args = new Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+      args[_key4] = arguments[_key4];
+    }
+
+    handleMouseOverOut(handleHide, args, 'toElement');
+  }, [handleHide]);
+  var triggers = trigger == null ? [] : [].concat(trigger);
+  var triggerProps = {};
+
+  if (triggers.indexOf('click') !== -1) {
+    triggerProps.onClick = handleClick;
+  }
+
+  if (triggers.indexOf('focus') !== -1) {
+    triggerProps.onFocus = handleFocus;
+    triggerProps.onBlur = handleBlur;
+  }
+
+  if (triggers.indexOf('hover') !== -1) {
+     true ? warning__WEBPACK_IMPORTED_MODULE_7___default()(triggers.length > 1, '[react-bootstrap] Specifying only the `"hover"` trigger limits the visibility of the overlay to just m
