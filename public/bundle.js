@@ -40305,4 +40305,186 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _restart_hooks_useTimeout__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @restart/hooks/useTimeout */ "./node_modules/@restart/hooks/esm/useTimeout.js");
 /* harmony import */ var _Fade__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./Fade */ "./node_modules/react-bootstrap/esm/Fade.js");
 /* harmony import */ var _ToastHeader__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./ToastHeader */ "./node_modules/react-bootstrap/esm/ToastHeader.js");
-/* harmony import */ var _ToastBody__WEBPACK_IMPOR
+/* harmony import */ var _ToastBody__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./ToastBody */ "./node_modules/react-bootstrap/esm/ToastBody.js");
+/* harmony import */ var _ThemeProvider__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./ThemeProvider */ "./node_modules/react-bootstrap/esm/ThemeProvider.js");
+/* harmony import */ var _ToastContext__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ./ToastContext */ "./node_modules/react-bootstrap/esm/ToastContext.js");
+
+
+
+
+
+
+
+
+
+
+var Toast = react__WEBPACK_IMPORTED_MODULE_2___default.a.forwardRef(function (_ref, ref) {
+  var bsPrefix = _ref.bsPrefix,
+      className = _ref.className,
+      children = _ref.children,
+      _ref$transition = _ref.transition,
+      Transition = _ref$transition === void 0 ? _Fade__WEBPACK_IMPORTED_MODULE_5__["default"] : _ref$transition,
+      _ref$show = _ref.show,
+      show = _ref$show === void 0 ? true : _ref$show,
+      _ref$animation = _ref.animation,
+      animation = _ref$animation === void 0 ? true : _ref$animation,
+      _ref$delay = _ref.delay,
+      delay = _ref$delay === void 0 ? 3000 : _ref$delay,
+      _ref$autohide = _ref.autohide,
+      autohide = _ref$autohide === void 0 ? false : _ref$autohide,
+      onClose = _ref.onClose,
+      props = Object(_babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__["default"])(_ref, ["bsPrefix", "className", "children", "transition", "show", "animation", "delay", "autohide", "onClose"]);
+
+  bsPrefix = Object(_ThemeProvider__WEBPACK_IMPORTED_MODULE_8__["useBootstrapPrefix"])(bsPrefix, 'toast'); // We use refs for these, because we don't want to restart the autohide
+  // timer in case these values change.
+
+  var delayRef = Object(react__WEBPACK_IMPORTED_MODULE_2__["useRef"])(delay);
+  var onCloseRef = Object(react__WEBPACK_IMPORTED_MODULE_2__["useRef"])(onClose);
+  Object(react__WEBPACK_IMPORTED_MODULE_2__["useEffect"])(function () {
+    delayRef.current = delay;
+    onCloseRef.current = onClose;
+  }, [delay, onClose]);
+  var autohideTimeout = Object(_restart_hooks_useTimeout__WEBPACK_IMPORTED_MODULE_4__["default"])();
+  var autohideToast = !!(autohide && show);
+  var autohideFunc = Object(react__WEBPACK_IMPORTED_MODULE_2__["useCallback"])(function () {
+    if (autohideToast) {
+      onCloseRef.current == null ? void 0 : onCloseRef.current();
+    }
+  }, [autohideToast]);
+  Object(react__WEBPACK_IMPORTED_MODULE_2__["useEffect"])(function () {
+    // Only reset timer if show or autohide changes.
+    autohideTimeout.set(autohideFunc, delayRef.current);
+  }, [autohideTimeout, autohideFunc]);
+  var toastContext = Object(react__WEBPACK_IMPORTED_MODULE_2__["useMemo"])(function () {
+    return {
+      onClose: onClose
+    };
+  }, [onClose]);
+  var hasAnimation = !!(Transition && animation);
+  var toast = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({}, props, {
+    ref: ref,
+    className: classnames__WEBPACK_IMPORTED_MODULE_3___default()(bsPrefix, className, !hasAnimation && (show ? 'show' : 'hide')),
+    role: "alert",
+    "aria-live": "assertive",
+    "aria-atomic": "true"
+  }), children);
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_ToastContext__WEBPACK_IMPORTED_MODULE_9__["default"].Provider, {
+    value: toastContext
+  }, hasAnimation && Transition ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Transition, {
+    in: show,
+    unmountOnExit: true
+  }, toast) : toast);
+});
+Toast.displayName = 'Toast';
+/* harmony default export */ __webpack_exports__["default"] = (Object.assign(Toast, {
+  Body: _ToastBody__WEBPACK_IMPORTED_MODULE_7__["default"],
+  Header: _ToastHeader__WEBPACK_IMPORTED_MODULE_6__["default"]
+}));
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/ToastBody.js":
+/*!*******************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/ToastBody.js ***!
+  \*******************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./createWithBsPrefix */ "./node_modules/react-bootstrap/esm/createWithBsPrefix.js");
+
+/* harmony default export */ __webpack_exports__["default"] = (Object(_createWithBsPrefix__WEBPACK_IMPORTED_MODULE_0__["default"])('toast-body'));
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/ToastContext.js":
+/*!**********************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/ToastContext.js ***!
+  \**********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+ // TODO: check
+
+var ToastContext = react__WEBPACK_IMPORTED_MODULE_0___default.a.createContext({
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  onClose: function onClose() {}
+});
+/* harmony default export */ __webpack_exports__["default"] = (ToastContext);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/ToastHeader.js":
+/*!*********************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/ToastHeader.js ***!
+  \*********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/esm/extends */ "./node_modules/@babel/runtime/helpers/esm/extends.js");
+/* harmony import */ var _babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/esm/objectWithoutPropertiesLoose */ "./node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! classnames */ "./node_modules/classnames/index.js");
+/* harmony import */ var classnames__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(classnames__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_3__);
+/* harmony import */ var _restart_hooks_useEventCallback__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @restart/hooks/useEventCallback */ "./node_modules/@restart/hooks/esm/useEventCallback.js");
+/* harmony import */ var _ThemeProvider__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./ThemeProvider */ "./node_modules/react-bootstrap/esm/ThemeProvider.js");
+/* harmony import */ var _CloseButton__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./CloseButton */ "./node_modules/react-bootstrap/esm/CloseButton.js");
+/* harmony import */ var _ToastContext__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./ToastContext */ "./node_modules/react-bootstrap/esm/ToastContext.js");
+
+
+
+
+
+
+
+
+var defaultProps = {
+  closeLabel: 'Close',
+  closeButton: true
+};
+var ToastHeader = react__WEBPACK_IMPORTED_MODULE_3___default.a.forwardRef(function (_ref, ref) {
+  var bsPrefix = _ref.bsPrefix,
+      closeLabel = _ref.closeLabel,
+      closeButton = _ref.closeButton,
+      className = _ref.className,
+      children = _ref.children,
+      props = Object(_babel_runtime_helpers_esm_objectWithoutPropertiesLoose__WEBPACK_IMPORTED_MODULE_1__["default"])(_ref, ["bsPrefix", "closeLabel", "closeButton", "className", "children"]);
+
+  bsPrefix = Object(_ThemeProvider__WEBPACK_IMPORTED_MODULE_5__["useBootstrapPrefix"])(bsPrefix, 'toast-header');
+  var context = Object(react__WEBPACK_IMPORTED_MODULE_3__["useContext"])(_ToastContext__WEBPACK_IMPORTED_MODULE_7__["default"]);
+  var handleClick = Object(_restart_hooks_useEventCallback__WEBPACK_IMPORTED_MODULE_4__["default"])(function (e) {
+    if (context && context.onClose) {
+      context.onClose(e);
+    }
+  });
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement("div", Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
+    ref: ref
+  }, props, {
+    className: classnames__WEBPACK_IMPORTED_MODULE_2___default()(bsPrefix, className)
+  }), children, closeButton && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_3___default.a.createElement(_CloseButton__WEBPACK_IMPORTED_MODULE_6__["default"], {
+    label: closeLabel,
+    onClick: handleClick,
+    className: "ml-2 mb-1",
+    "data-dismiss": "toast"
+  }));
+});
+ToastHeader.displayName = 'ToastHeader';
+ToastHeader.defaultProps = defaultProps;
+/* harmony default export */ __webpack_exports__["default"] = (ToastHeader);
+
+/***/ }),
+
+/***/ "./node_modules/react-bootstrap/esm/ToggleButton.js":
+/*!**********************************************************!*\
+  !*** ./node_modules/react-bootstrap/esm/ToggleButton.js ***!
+  \**********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_expor
