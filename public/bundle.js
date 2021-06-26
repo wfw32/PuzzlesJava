@@ -47153,4 +47153,299 @@ var possibleRegistrationNames =  {} ; // Trust the developer to only use possibl
  */
 
 function injectEventPluginOrder(injectedEventPluginOrder) {
-  if (!!eventPluginOr
+  if (!!eventPluginOrder) {
+    {
+      throw Error( "EventPluginRegistry: Cannot inject event plugin ordering more than once. You are likely trying to load more than one copy of React." );
+    }
+  } // Clone the ordering so it cannot be dynamically mutated.
+
+
+  eventPluginOrder = Array.prototype.slice.call(injectedEventPluginOrder);
+  recomputePluginOrdering();
+}
+/**
+ * Injects plugins to be used by plugin event system. The plugin names must be
+ * in the ordering injected by `injectEventPluginOrder`.
+ *
+ * Plugins can be injected as part of page initialization or on-the-fly.
+ *
+ * @param {object} injectedNamesToPlugins Map from names to plugin modules.
+ * @internal
+ */
+
+function injectEventPluginsByName(injectedNamesToPlugins) {
+  var isOrderingDirty = false;
+
+  for (var pluginName in injectedNamesToPlugins) {
+    if (!injectedNamesToPlugins.hasOwnProperty(pluginName)) {
+      continue;
+    }
+
+    var pluginModule = injectedNamesToPlugins[pluginName];
+
+    if (!namesToPlugins.hasOwnProperty(pluginName) || namesToPlugins[pluginName] !== pluginModule) {
+      if (!!namesToPlugins[pluginName]) {
+        {
+          throw Error( "EventPluginRegistry: Cannot inject two different event plugins using the same name, `" + pluginName + "`." );
+        }
+      }
+
+      namesToPlugins[pluginName] = pluginModule;
+      isOrderingDirty = true;
+    }
+  }
+
+  if (isOrderingDirty) {
+    recomputePluginOrdering();
+  }
+}
+
+var canUseDOM = !!(typeof window !== 'undefined' && typeof window.document !== 'undefined' && typeof window.document.createElement !== 'undefined');
+
+var PLUGIN_EVENT_SYSTEM = 1;
+var IS_REPLAYED = 1 << 5;
+var IS_FIRST_ANCESTOR = 1 << 6;
+
+var restoreImpl = null;
+var restoreTarget = null;
+var restoreQueue = null;
+
+function restoreStateOfTarget(target) {
+  // We perform this translation at the end of the event loop so that we
+  // always receive the correct fiber here
+  var internalInstance = getInstanceFromNode(target);
+
+  if (!internalInstance) {
+    // Unmounted
+    return;
+  }
+
+  if (!(typeof restoreImpl === 'function')) {
+    {
+      throw Error( "setRestoreImplementation() needs to be called to handle a target for controlled events. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+
+  var stateNode = internalInstance.stateNode; // Guard against Fiber being unmounted.
+
+  if (stateNode) {
+    var _props = getFiberCurrentPropsFromNode(stateNode);
+
+    restoreImpl(internalInstance.stateNode, internalInstance.type, _props);
+  }
+}
+
+function setRestoreImplementation(impl) {
+  restoreImpl = impl;
+}
+function enqueueStateRestore(target) {
+  if (restoreTarget) {
+    if (restoreQueue) {
+      restoreQueue.push(target);
+    } else {
+      restoreQueue = [target];
+    }
+  } else {
+    restoreTarget = target;
+  }
+}
+function needsStateRestore() {
+  return restoreTarget !== null || restoreQueue !== null;
+}
+function restoreStateIfNeeded() {
+  if (!restoreTarget) {
+    return;
+  }
+
+  var target = restoreTarget;
+  var queuedTargets = restoreQueue;
+  restoreTarget = null;
+  restoreQueue = null;
+  restoreStateOfTarget(target);
+
+  if (queuedTargets) {
+    for (var i = 0; i < queuedTargets.length; i++) {
+      restoreStateOfTarget(queuedTargets[i]);
+    }
+  }
+}
+
+var enableProfilerTimer = true; // Trace which interactions trigger each commit.
+
+var enableDeprecatedFlareAPI = false; // Experimental Host Component support.
+
+var enableFundamentalAPI = false; // Experimental Scope support.
+var warnAboutStringRefs = false;
+
+// the renderer. Such as when we're dispatching events or if third party
+// libraries need to call batchedUpdates. Eventually, this API will go away when
+// everything is batched by default. We'll then have a similar API to opt-out of
+// scheduled work and instead do synchronous work.
+// Defaults
+
+var batchedUpdatesImpl = function (fn, bookkeeping) {
+  return fn(bookkeeping);
+};
+
+var discreteUpdatesImpl = function (fn, a, b, c, d) {
+  return fn(a, b, c, d);
+};
+
+var flushDiscreteUpdatesImpl = function () {};
+
+var batchedEventUpdatesImpl = batchedUpdatesImpl;
+var isInsideEventHandler = false;
+var isBatchingEventUpdates = false;
+
+function finishEventHandler() {
+  // Here we wait until all updates have propagated, which is important
+  // when using controlled components within layers:
+  // https://github.com/facebook/react/issues/1698
+  // Then we restore state of any controlled component.
+  var controlledComponentsHavePendingUpdates = needsStateRestore();
+
+  if (controlledComponentsHavePendingUpdates) {
+    // If a controlled event was fired, we may need to restore the state of
+    // the DOM node back to the controlled value. This is necessary when React
+    // bails out of the update without touching the DOM.
+    flushDiscreteUpdatesImpl();
+    restoreStateIfNeeded();
+  }
+}
+
+function batchedUpdates(fn, bookkeeping) {
+  if (isInsideEventHandler) {
+    // If we are currently inside another batch, we need to wait until it
+    // fully completes before restoring state.
+    return fn(bookkeeping);
+  }
+
+  isInsideEventHandler = true;
+
+  try {
+    return batchedUpdatesImpl(fn, bookkeeping);
+  } finally {
+    isInsideEventHandler = false;
+    finishEventHandler();
+  }
+}
+function batchedEventUpdates(fn, a, b) {
+  if (isBatchingEventUpdates) {
+    // If we are currently inside another batch, we need to wait until it
+    // fully completes before restoring state.
+    return fn(a, b);
+  }
+
+  isBatchingEventUpdates = true;
+
+  try {
+    return batchedEventUpdatesImpl(fn, a, b);
+  } finally {
+    isBatchingEventUpdates = false;
+    finishEventHandler();
+  }
+} // This is for the React Flare event system
+function discreteUpdates(fn, a, b, c, d) {
+  var prevIsInsideEventHandler = isInsideEventHandler;
+  isInsideEventHandler = true;
+
+  try {
+    return discreteUpdatesImpl(fn, a, b, c, d);
+  } finally {
+    isInsideEventHandler = prevIsInsideEventHandler;
+
+    if (!isInsideEventHandler) {
+      finishEventHandler();
+    }
+  }
+}
+function flushDiscreteUpdatesIfNeeded(timeStamp) {
+  // event.timeStamp isn't overly reliable due to inconsistencies in
+  // how different browsers have historically provided the time stamp.
+  // Some browsers provide high-resolution time stamps for all events,
+  // some provide low-resolution time stamps for all events. FF < 52
+  // even mixes both time stamps together. Some browsers even report
+  // negative time stamps or time stamps that are 0 (iOS9) in some cases.
+  // Given we are only comparing two time stamps with equality (!==),
+  // we are safe from the resolution differences. If the time stamp is 0
+  // we bail-out of preventing the flush, which can affect semantics,
+  // such as if an earlier flush removes or adds event listeners that
+  // are fired in the subsequent flush. However, this is the same
+  // behaviour as we had before this change, so the risks are low.
+  if (!isInsideEventHandler && (!enableDeprecatedFlareAPI  )) {
+    flushDiscreteUpdatesImpl();
+  }
+}
+function setBatchingImplementation(_batchedUpdatesImpl, _discreteUpdatesImpl, _flushDiscreteUpdatesImpl, _batchedEventUpdatesImpl) {
+  batchedUpdatesImpl = _batchedUpdatesImpl;
+  discreteUpdatesImpl = _discreteUpdatesImpl;
+  flushDiscreteUpdatesImpl = _flushDiscreteUpdatesImpl;
+  batchedEventUpdatesImpl = _batchedEventUpdatesImpl;
+}
+
+var DiscreteEvent = 0;
+var UserBlockingEvent = 1;
+var ContinuousEvent = 2;
+
+// A reserved attribute.
+// It is handled by React separately and shouldn't be written to the DOM.
+var RESERVED = 0; // A simple string attribute.
+// Attributes that aren't in the whitelist are presumed to have this type.
+
+var STRING = 1; // A string attribute that accepts booleans in React. In HTML, these are called
+// "enumerated" attributes with "true" and "false" as possible values.
+// When true, it should be set to a "true" string.
+// When false, it should be set to a "false" string.
+
+var BOOLEANISH_STRING = 2; // A real boolean attribute.
+// When true, it should be present (set either to an empty string or its name).
+// When false, it should be omitted.
+
+var BOOLEAN = 3; // An attribute that can be used as a flag as well as with a value.
+// When true, it should be present (set either to an empty string or its name).
+// When false, it should be omitted.
+// For any other value, should be present with that value.
+
+var OVERLOADED_BOOLEAN = 4; // An attribute that must be numeric or parse as a numeric.
+// When falsy, it should be removed.
+
+var NUMERIC = 5; // An attribute that must be positive numeric or parse as a positive numeric.
+// When falsy, it should be removed.
+
+var POSITIVE_NUMERIC = 6;
+
+/* eslint-disable max-len */
+var ATTRIBUTE_NAME_START_CHAR = ":A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
+/* eslint-enable max-len */
+
+var ATTRIBUTE_NAME_CHAR = ATTRIBUTE_NAME_START_CHAR + "\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040";
+var ROOT_ATTRIBUTE_NAME = 'data-reactroot';
+var VALID_ATTRIBUTE_NAME_REGEX = new RegExp('^[' + ATTRIBUTE_NAME_START_CHAR + '][' + ATTRIBUTE_NAME_CHAR + ']*$');
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+var illegalAttributeNameCache = {};
+var validatedAttributeNameCache = {};
+function isAttributeNameSafe(attributeName) {
+  if (hasOwnProperty.call(validatedAttributeNameCache, attributeName)) {
+    return true;
+  }
+
+  if (hasOwnProperty.call(illegalAttributeNameCache, attributeName)) {
+    return false;
+  }
+
+  if (VALID_ATTRIBUTE_NAME_REGEX.test(attributeName)) {
+    validatedAttributeNameCache[attributeName] = true;
+    return true;
+  }
+
+  illegalAttributeNameCache[attributeName] = true;
+
+  {
+    error('Invalid attribute name: `%s`', attributeName);
+  }
+
+  return false;
+}
+function shouldIgnoreAttribute(name, propertyInfo, isCustomComponentTag) {
+  if (propertyInfo !== null) {
+  
