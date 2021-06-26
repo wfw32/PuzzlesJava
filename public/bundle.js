@@ -46828,4 +46828,329 @@ var reporter = {
  * implementation in DEV mode.
  *
  * @param {String} name of the guard to use for logging or debugging
- * 
+ * @param {Function} func The function to invoke
+ * @param {*} context The context to use when calling the function
+ * @param {...*} args Arguments for function
+ */
+
+function invokeGuardedCallback(name, func, context, a, b, c, d, e, f) {
+  hasError = false;
+  caughtError = null;
+  invokeGuardedCallbackImpl$1.apply(reporter, arguments);
+}
+/**
+ * Same as invokeGuardedCallback, but instead of returning an error, it stores
+ * it in a global so it can be rethrown by `rethrowCaughtError` later.
+ * TODO: See if caughtError and rethrowError can be unified.
+ *
+ * @param {String} name of the guard to use for logging or debugging
+ * @param {Function} func The function to invoke
+ * @param {*} context The context to use when calling the function
+ * @param {...*} args Arguments for function
+ */
+
+function invokeGuardedCallbackAndCatchFirstError(name, func, context, a, b, c, d, e, f) {
+  invokeGuardedCallback.apply(this, arguments);
+
+  if (hasError) {
+    var error = clearCaughtError();
+
+    if (!hasRethrowError) {
+      hasRethrowError = true;
+      rethrowError = error;
+    }
+  }
+}
+/**
+ * During execution of guarded functions we will capture the first error which
+ * we will rethrow to be handled by the top level error handler.
+ */
+
+function rethrowCaughtError() {
+  if (hasRethrowError) {
+    var error = rethrowError;
+    hasRethrowError = false;
+    rethrowError = null;
+    throw error;
+  }
+}
+function hasCaughtError() {
+  return hasError;
+}
+function clearCaughtError() {
+  if (hasError) {
+    var error = caughtError;
+    hasError = false;
+    caughtError = null;
+    return error;
+  } else {
+    {
+      {
+        throw Error( "clearCaughtError was called but no error was captured. This error is likely caused by a bug in React. Please file an issue." );
+      }
+    }
+  }
+}
+
+var getFiberCurrentPropsFromNode = null;
+var getInstanceFromNode = null;
+var getNodeFromInstance = null;
+function setComponentTree(getFiberCurrentPropsFromNodeImpl, getInstanceFromNodeImpl, getNodeFromInstanceImpl) {
+  getFiberCurrentPropsFromNode = getFiberCurrentPropsFromNodeImpl;
+  getInstanceFromNode = getInstanceFromNodeImpl;
+  getNodeFromInstance = getNodeFromInstanceImpl;
+
+  {
+    if (!getNodeFromInstance || !getInstanceFromNode) {
+      error('EventPluginUtils.setComponentTree(...): Injected ' + 'module is missing getNodeFromInstance or getInstanceFromNode.');
+    }
+  }
+}
+var validateEventDispatches;
+
+{
+  validateEventDispatches = function (event) {
+    var dispatchListeners = event._dispatchListeners;
+    var dispatchInstances = event._dispatchInstances;
+    var listenersIsArr = Array.isArray(dispatchListeners);
+    var listenersLen = listenersIsArr ? dispatchListeners.length : dispatchListeners ? 1 : 0;
+    var instancesIsArr = Array.isArray(dispatchInstances);
+    var instancesLen = instancesIsArr ? dispatchInstances.length : dispatchInstances ? 1 : 0;
+
+    if (instancesIsArr !== listenersIsArr || instancesLen !== listenersLen) {
+      error('EventPluginUtils: Invalid `event`.');
+    }
+  };
+}
+/**
+ * Dispatch the event to the listener.
+ * @param {SyntheticEvent} event SyntheticEvent to handle
+ * @param {function} listener Application-level callback
+ * @param {*} inst Internal component instance
+ */
+
+
+function executeDispatch(event, listener, inst) {
+  var type = event.type || 'unknown-event';
+  event.currentTarget = getNodeFromInstance(inst);
+  invokeGuardedCallbackAndCatchFirstError(type, listener, undefined, event);
+  event.currentTarget = null;
+}
+/**
+ * Standard/simple iteration through an event's collected dispatches.
+ */
+
+function executeDispatchesInOrder(event) {
+  var dispatchListeners = event._dispatchListeners;
+  var dispatchInstances = event._dispatchInstances;
+
+  {
+    validateEventDispatches(event);
+  }
+
+  if (Array.isArray(dispatchListeners)) {
+    for (var i = 0; i < dispatchListeners.length; i++) {
+      if (event.isPropagationStopped()) {
+        break;
+      } // Listeners and Instances are two parallel arrays that are always in sync.
+
+
+      executeDispatch(event, dispatchListeners[i], dispatchInstances[i]);
+    }
+  } else if (dispatchListeners) {
+    executeDispatch(event, dispatchListeners, dispatchInstances);
+  }
+
+  event._dispatchListeners = null;
+  event._dispatchInstances = null;
+}
+
+var FunctionComponent = 0;
+var ClassComponent = 1;
+var IndeterminateComponent = 2; // Before we know whether it is function or class
+
+var HostRoot = 3; // Root of a host tree. Could be nested inside another node.
+
+var HostPortal = 4; // A subtree. Could be an entry point to a different renderer.
+
+var HostComponent = 5;
+var HostText = 6;
+var Fragment = 7;
+var Mode = 8;
+var ContextConsumer = 9;
+var ContextProvider = 10;
+var ForwardRef = 11;
+var Profiler = 12;
+var SuspenseComponent = 13;
+var MemoComponent = 14;
+var SimpleMemoComponent = 15;
+var LazyComponent = 16;
+var IncompleteClassComponent = 17;
+var DehydratedFragment = 18;
+var SuspenseListComponent = 19;
+var FundamentalComponent = 20;
+var ScopeComponent = 21;
+var Block = 22;
+
+/**
+ * Injectable ordering of event plugins.
+ */
+var eventPluginOrder = null;
+/**
+ * Injectable mapping from names to event plugin modules.
+ */
+
+var namesToPlugins = {};
+/**
+ * Recomputes the plugin list using the injected plugins and plugin ordering.
+ *
+ * @private
+ */
+
+function recomputePluginOrdering() {
+  if (!eventPluginOrder) {
+    // Wait until an `eventPluginOrder` is injected.
+    return;
+  }
+
+  for (var pluginName in namesToPlugins) {
+    var pluginModule = namesToPlugins[pluginName];
+    var pluginIndex = eventPluginOrder.indexOf(pluginName);
+
+    if (!(pluginIndex > -1)) {
+      {
+        throw Error( "EventPluginRegistry: Cannot inject event plugins that do not exist in the plugin ordering, `" + pluginName + "`." );
+      }
+    }
+
+    if (plugins[pluginIndex]) {
+      continue;
+    }
+
+    if (!pluginModule.extractEvents) {
+      {
+        throw Error( "EventPluginRegistry: Event plugins must implement an `extractEvents` method, but `" + pluginName + "` does not." );
+      }
+    }
+
+    plugins[pluginIndex] = pluginModule;
+    var publishedEvents = pluginModule.eventTypes;
+
+    for (var eventName in publishedEvents) {
+      if (!publishEventForPlugin(publishedEvents[eventName], pluginModule, eventName)) {
+        {
+          throw Error( "EventPluginRegistry: Failed to publish event `" + eventName + "` for plugin `" + pluginName + "`." );
+        }
+      }
+    }
+  }
+}
+/**
+ * Publishes an event so that it can be dispatched by the supplied plugin.
+ *
+ * @param {object} dispatchConfig Dispatch configuration for the event.
+ * @param {object} PluginModule Plugin publishing the event.
+ * @return {boolean} True if the event was successfully published.
+ * @private
+ */
+
+
+function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
+  if (!!eventNameDispatchConfigs.hasOwnProperty(eventName)) {
+    {
+      throw Error( "EventPluginRegistry: More than one plugin attempted to publish the same event name, `" + eventName + "`." );
+    }
+  }
+
+  eventNameDispatchConfigs[eventName] = dispatchConfig;
+  var phasedRegistrationNames = dispatchConfig.phasedRegistrationNames;
+
+  if (phasedRegistrationNames) {
+    for (var phaseName in phasedRegistrationNames) {
+      if (phasedRegistrationNames.hasOwnProperty(phaseName)) {
+        var phasedRegistrationName = phasedRegistrationNames[phaseName];
+        publishRegistrationName(phasedRegistrationName, pluginModule, eventName);
+      }
+    }
+
+    return true;
+  } else if (dispatchConfig.registrationName) {
+    publishRegistrationName(dispatchConfig.registrationName, pluginModule, eventName);
+    return true;
+  }
+
+  return false;
+}
+/**
+ * Publishes a registration name that is used to identify dispatched events.
+ *
+ * @param {string} registrationName Registration name to add.
+ * @param {object} PluginModule Plugin publishing the event.
+ * @private
+ */
+
+
+function publishRegistrationName(registrationName, pluginModule, eventName) {
+  if (!!registrationNameModules[registrationName]) {
+    {
+      throw Error( "EventPluginRegistry: More than one plugin attempted to publish the same registration name, `" + registrationName + "`." );
+    }
+  }
+
+  registrationNameModules[registrationName] = pluginModule;
+  registrationNameDependencies[registrationName] = pluginModule.eventTypes[eventName].dependencies;
+
+  {
+    var lowerCasedName = registrationName.toLowerCase();
+    possibleRegistrationNames[lowerCasedName] = registrationName;
+
+    if (registrationName === 'onDoubleClick') {
+      possibleRegistrationNames.ondblclick = registrationName;
+    }
+  }
+}
+/**
+ * Registers plugins so that they can extract and dispatch events.
+ */
+
+/**
+ * Ordered list of injected plugins.
+ */
+
+
+var plugins = [];
+/**
+ * Mapping from event name to dispatch config
+ */
+
+var eventNameDispatchConfigs = {};
+/**
+ * Mapping from registration name to plugin module
+ */
+
+var registrationNameModules = {};
+/**
+ * Mapping from registration name to event name
+ */
+
+var registrationNameDependencies = {};
+/**
+ * Mapping from lowercase registration names to the properly cased version,
+ * used to warn in the case of missing event handlers. Available
+ * only in true.
+ * @type {Object}
+ */
+
+var possibleRegistrationNames =  {} ; // Trust the developer to only use possibleRegistrationNames in true
+
+/**
+ * Injects an ordering of plugins (by plugin name). This allows the ordering
+ * to be decoupled from injection of the actual plugins so that ordering is
+ * always deterministic regardless of packaging, on-the-fly injection, etc.
+ *
+ * @param {array} InjectedEventPluginOrder
+ * @internal
+ */
+
+function injectEventPluginOrder(injectedEventPluginOrder) {
+  if (!!eventPluginOr
