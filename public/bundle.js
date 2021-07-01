@@ -48549,4 +48549,303 @@ function updateNamedCousins(rootNode, props) {
     } // If `rootNode.form` was non-null, then we could try `form.elements`,
     // but that sometimes behaves strangely in IE8. We could also try using
     // `form.getElementsByName`, but that will only return direct children
- 
+    // and won't include inputs that use the HTML5 `form=` attribute. Since
+    // the input might not even be in a form. It might not even be in the
+    // document. Let's just use the local `querySelectorAll` to ensure we don't
+    // miss anything.
+
+
+    var group = queryRoot.querySelectorAll('input[name=' + JSON.stringify('' + name) + '][type="radio"]');
+
+    for (var i = 0; i < group.length; i++) {
+      var otherNode = group[i];
+
+      if (otherNode === rootNode || otherNode.form !== rootNode.form) {
+        continue;
+      } // This will throw if radio buttons rendered by different copies of React
+      // and the same name are rendered into the same form (same as #1939).
+      // That's probably okay; we don't support it just as we don't support
+      // mixing React radio buttons with non-React ones.
+
+
+      var otherProps = getFiberCurrentPropsFromNode$1(otherNode);
+
+      if (!otherProps) {
+        {
+          throw Error( "ReactDOMInput: Mixing React and non-React radio inputs with the same `name` is not supported." );
+        }
+      } // We need update the tracked value on the named cousin since the value
+      // was changed but the input saw no event or value set
+
+
+      updateValueIfChanged(otherNode); // If this is a controlled radio button group, forcing the input that
+      // was previously checked to update will cause it to be come re-checked
+      // as appropriate.
+
+      updateWrapper(otherNode, otherProps);
+    }
+  }
+} // In Chrome, assigning defaultValue to certain input types triggers input validation.
+// For number inputs, the display value loses trailing decimal points. For email inputs,
+// Chrome raises "The specified value <x> is not a valid email address".
+//
+// Here we check to see if the defaultValue has actually changed, avoiding these problems
+// when the user is inputting text
+//
+// https://github.com/facebook/react/issues/7253
+
+
+function setDefaultValue(node, type, value) {
+  if ( // Focused number inputs synchronize on blur. See ChangeEventPlugin.js
+  type !== 'number' || node.ownerDocument.activeElement !== node) {
+    if (value == null) {
+      node.defaultValue = toString(node._wrapperState.initialValue);
+    } else if (node.defaultValue !== toString(value)) {
+      node.defaultValue = toString(value);
+    }
+  }
+}
+
+var didWarnSelectedSetOnOption = false;
+var didWarnInvalidChild = false;
+
+function flattenChildren(children) {
+  var content = ''; // Flatten children. We'll warn if they are invalid
+  // during validateProps() which runs for hydration too.
+  // Note that this would throw on non-element objects.
+  // Elements are stringified (which is normally irrelevant
+  // but matters for <fbt>).
+
+  React.Children.forEach(children, function (child) {
+    if (child == null) {
+      return;
+    }
+
+    content += child; // Note: we don't warn about invalid children here.
+    // Instead, this is done separately below so that
+    // it happens during the hydration codepath too.
+  });
+  return content;
+}
+/**
+ * Implements an <option> host component that warns when `selected` is set.
+ */
+
+
+function validateProps(element, props) {
+  {
+    // This mirrors the codepath above, but runs for hydration too.
+    // Warn about invalid children here so that client and hydration are consistent.
+    // TODO: this seems like it could cause a DEV-only throw for hydration
+    // if children contains a non-element object. We should try to avoid that.
+    if (typeof props.children === 'object' && props.children !== null) {
+      React.Children.forEach(props.children, function (child) {
+        if (child == null) {
+          return;
+        }
+
+        if (typeof child === 'string' || typeof child === 'number') {
+          return;
+        }
+
+        if (typeof child.type !== 'string') {
+          return;
+        }
+
+        if (!didWarnInvalidChild) {
+          didWarnInvalidChild = true;
+
+          error('Only strings and numbers are supported as <option> children.');
+        }
+      });
+    } // TODO: Remove support for `selected` in <option>.
+
+
+    if (props.selected != null && !didWarnSelectedSetOnOption) {
+      error('Use the `defaultValue` or `value` props on <select> instead of ' + 'setting `selected` on <option>.');
+
+      didWarnSelectedSetOnOption = true;
+    }
+  }
+}
+function postMountWrapper$1(element, props) {
+  // value="" should make a value attribute (#6219)
+  if (props.value != null) {
+    element.setAttribute('value', toString(getToStringValue(props.value)));
+  }
+}
+function getHostProps$1(element, props) {
+  var hostProps = _assign({
+    children: undefined
+  }, props);
+
+  var content = flattenChildren(props.children);
+
+  if (content) {
+    hostProps.children = content;
+  }
+
+  return hostProps;
+}
+
+var didWarnValueDefaultValue$1;
+
+{
+  didWarnValueDefaultValue$1 = false;
+}
+
+function getDeclarationErrorAddendum() {
+  var ownerName = getCurrentFiberOwnerNameInDevOrNull();
+
+  if (ownerName) {
+    return '\n\nCheck the render method of `' + ownerName + '`.';
+  }
+
+  return '';
+}
+
+var valuePropNames = ['value', 'defaultValue'];
+/**
+ * Validation function for `value` and `defaultValue`.
+ */
+
+function checkSelectPropTypes(props) {
+  {
+    ReactControlledValuePropTypes.checkPropTypes('select', props);
+
+    for (var i = 0; i < valuePropNames.length; i++) {
+      var propName = valuePropNames[i];
+
+      if (props[propName] == null) {
+        continue;
+      }
+
+      var isArray = Array.isArray(props[propName]);
+
+      if (props.multiple && !isArray) {
+        error('The `%s` prop supplied to <select> must be an array if ' + '`multiple` is true.%s', propName, getDeclarationErrorAddendum());
+      } else if (!props.multiple && isArray) {
+        error('The `%s` prop supplied to <select> must be a scalar ' + 'value if `multiple` is false.%s', propName, getDeclarationErrorAddendum());
+      }
+    }
+  }
+}
+
+function updateOptions(node, multiple, propValue, setDefaultSelected) {
+  var options = node.options;
+
+  if (multiple) {
+    var selectedValues = propValue;
+    var selectedValue = {};
+
+    for (var i = 0; i < selectedValues.length; i++) {
+      // Prefix to avoid chaos with special keys.
+      selectedValue['$' + selectedValues[i]] = true;
+    }
+
+    for (var _i = 0; _i < options.length; _i++) {
+      var selected = selectedValue.hasOwnProperty('$' + options[_i].value);
+
+      if (options[_i].selected !== selected) {
+        options[_i].selected = selected;
+      }
+
+      if (selected && setDefaultSelected) {
+        options[_i].defaultSelected = true;
+      }
+    }
+  } else {
+    // Do not set `select.value` as exact behavior isn't consistent across all
+    // browsers for all cases.
+    var _selectedValue = toString(getToStringValue(propValue));
+
+    var defaultSelected = null;
+
+    for (var _i2 = 0; _i2 < options.length; _i2++) {
+      if (options[_i2].value === _selectedValue) {
+        options[_i2].selected = true;
+
+        if (setDefaultSelected) {
+          options[_i2].defaultSelected = true;
+        }
+
+        return;
+      }
+
+      if (defaultSelected === null && !options[_i2].disabled) {
+        defaultSelected = options[_i2];
+      }
+    }
+
+    if (defaultSelected !== null) {
+      defaultSelected.selected = true;
+    }
+  }
+}
+/**
+ * Implements a <select> host component that allows optionally setting the
+ * props `value` and `defaultValue`. If `multiple` is false, the prop must be a
+ * stringable. If `multiple` is true, the prop must be an array of stringables.
+ *
+ * If `value` is not supplied (or null/undefined), user actions that change the
+ * selected option will trigger updates to the rendered options.
+ *
+ * If it is supplied (and not null/undefined), the rendered options will not
+ * update in response to user actions. Instead, the `value` prop must change in
+ * order for the rendered options to update.
+ *
+ * If `defaultValue` is provided, any options with the supplied values will be
+ * selected.
+ */
+
+
+function getHostProps$2(element, props) {
+  return _assign({}, props, {
+    value: undefined
+  });
+}
+function initWrapperState$1(element, props) {
+  var node = element;
+
+  {
+    checkSelectPropTypes(props);
+  }
+
+  node._wrapperState = {
+    wasMultiple: !!props.multiple
+  };
+
+  {
+    if (props.value !== undefined && props.defaultValue !== undefined && !didWarnValueDefaultValue$1) {
+      error('Select elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled select ' + 'element and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components');
+
+      didWarnValueDefaultValue$1 = true;
+    }
+  }
+}
+function postMountWrapper$2(element, props) {
+  var node = element;
+  node.multiple = !!props.multiple;
+  var value = props.value;
+
+  if (value != null) {
+    updateOptions(node, !!props.multiple, value, false);
+  } else if (props.defaultValue != null) {
+    updateOptions(node, !!props.multiple, props.defaultValue, true);
+  }
+}
+function postUpdateWrapper(element, props) {
+  var node = element;
+  var wasMultiple = node._wrapperState.wasMultiple;
+  node._wrapperState.wasMultiple = !!props.multiple;
+  var value = props.value;
+
+  if (value != null) {
+    updateOptions(node, !!props.multiple, value, false);
+  } else if (wasMultiple !== !!props.multiple) {
+    // For simplicity, reapply `defaultValue` if `multiple` is toggled.
+    if (props.defaultValue != null) {
+      updateOptions(node, !!props.multiple, props.defaultValue, true);
+    } else {
+      // Revert the select back to its default unselected state.
+      updateOptions(node, !!props.multiple, 
