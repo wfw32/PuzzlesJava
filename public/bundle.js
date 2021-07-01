@@ -48848,4 +48848,329 @@ function postUpdateWrapper(element, props) {
       updateOptions(node, !!props.multiple, props.defaultValue, true);
     } else {
       // Revert the select back to its default unselected state.
-      updateOptions(node, !!props.multiple, 
+      updateOptions(node, !!props.multiple, props.multiple ? [] : '', false);
+    }
+  }
+}
+function restoreControlledState$1(element, props) {
+  var node = element;
+  var value = props.value;
+
+  if (value != null) {
+    updateOptions(node, !!props.multiple, value, false);
+  }
+}
+
+var didWarnValDefaultVal = false;
+
+/**
+ * Implements a <textarea> host component that allows setting `value`, and
+ * `defaultValue`. This differs from the traditional DOM API because value is
+ * usually set as PCDATA children.
+ *
+ * If `value` is not supplied (or null/undefined), user actions that affect the
+ * value will trigger updates to the element.
+ *
+ * If `value` is supplied (and not null/undefined), the rendered element will
+ * not trigger updates to the element. Instead, the `value` prop must change in
+ * order for the rendered element to be updated.
+ *
+ * The rendered element will be initialized with an empty value, the prop
+ * `defaultValue` if specified, or the children content (deprecated).
+ */
+function getHostProps$3(element, props) {
+  var node = element;
+
+  if (!(props.dangerouslySetInnerHTML == null)) {
+    {
+      throw Error( "`dangerouslySetInnerHTML` does not make sense on <textarea>." );
+    }
+  } // Always set children to the same thing. In IE9, the selection range will
+  // get reset if `textContent` is mutated.  We could add a check in setTextContent
+  // to only set the value if/when the value differs from the node value (which would
+  // completely solve this IE9 bug), but Sebastian+Sophie seemed to like this
+  // solution. The value can be a boolean or object so that's why it's forced
+  // to be a string.
+
+
+  var hostProps = _assign({}, props, {
+    value: undefined,
+    defaultValue: undefined,
+    children: toString(node._wrapperState.initialValue)
+  });
+
+  return hostProps;
+}
+function initWrapperState$2(element, props) {
+  var node = element;
+
+  {
+    ReactControlledValuePropTypes.checkPropTypes('textarea', props);
+
+    if (props.value !== undefined && props.defaultValue !== undefined && !didWarnValDefaultVal) {
+      error('%s contains a textarea with both value and defaultValue props. ' + 'Textarea elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled textarea ' + 'and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components', getCurrentFiberOwnerNameInDevOrNull() || 'A component');
+
+      didWarnValDefaultVal = true;
+    }
+  }
+
+  var initialValue = props.value; // Only bother fetching default value if we're going to use it
+
+  if (initialValue == null) {
+    var children = props.children,
+        defaultValue = props.defaultValue;
+
+    if (children != null) {
+      {
+        error('Use the `defaultValue` or `value` props instead of setting ' + 'children on <textarea>.');
+      }
+
+      {
+        if (!(defaultValue == null)) {
+          {
+            throw Error( "If you supply `defaultValue` on a <textarea>, do not pass children." );
+          }
+        }
+
+        if (Array.isArray(children)) {
+          if (!(children.length <= 1)) {
+            {
+              throw Error( "<textarea> can only have at most one child." );
+            }
+          }
+
+          children = children[0];
+        }
+
+        defaultValue = children;
+      }
+    }
+
+    if (defaultValue == null) {
+      defaultValue = '';
+    }
+
+    initialValue = defaultValue;
+  }
+
+  node._wrapperState = {
+    initialValue: getToStringValue(initialValue)
+  };
+}
+function updateWrapper$1(element, props) {
+  var node = element;
+  var value = getToStringValue(props.value);
+  var defaultValue = getToStringValue(props.defaultValue);
+
+  if (value != null) {
+    // Cast `value` to a string to ensure the value is set correctly. While
+    // browsers typically do this as necessary, jsdom doesn't.
+    var newValue = toString(value); // To avoid side effects (such as losing text selection), only set value if changed
+
+    if (newValue !== node.value) {
+      node.value = newValue;
+    }
+
+    if (props.defaultValue == null && node.defaultValue !== newValue) {
+      node.defaultValue = newValue;
+    }
+  }
+
+  if (defaultValue != null) {
+    node.defaultValue = toString(defaultValue);
+  }
+}
+function postMountWrapper$3(element, props) {
+  var node = element; // This is in postMount because we need access to the DOM node, which is not
+  // available until after the component has mounted.
+
+  var textContent = node.textContent; // Only set node.value if textContent is equal to the expected
+  // initial value. In IE10/IE11 there is a bug where the placeholder attribute
+  // will populate textContent as well.
+  // https://developer.microsoft.com/microsoft-edge/platform/issues/101525/
+
+  if (textContent === node._wrapperState.initialValue) {
+    if (textContent !== '' && textContent !== null) {
+      node.value = textContent;
+    }
+  }
+}
+function restoreControlledState$2(element, props) {
+  // DOM component is still mounted; update
+  updateWrapper$1(element, props);
+}
+
+var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+var MATH_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
+var SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+var Namespaces = {
+  html: HTML_NAMESPACE,
+  mathml: MATH_NAMESPACE,
+  svg: SVG_NAMESPACE
+}; // Assumes there is no parent namespace.
+
+function getIntrinsicNamespace(type) {
+  switch (type) {
+    case 'svg':
+      return SVG_NAMESPACE;
+
+    case 'math':
+      return MATH_NAMESPACE;
+
+    default:
+      return HTML_NAMESPACE;
+  }
+}
+function getChildNamespace(parentNamespace, type) {
+  if (parentNamespace == null || parentNamespace === HTML_NAMESPACE) {
+    // No (or default) parent namespace: potential entry point.
+    return getIntrinsicNamespace(type);
+  }
+
+  if (parentNamespace === SVG_NAMESPACE && type === 'foreignObject') {
+    // We're leaving SVG.
+    return HTML_NAMESPACE;
+  } // By default, pass namespace below.
+
+
+  return parentNamespace;
+}
+
+/* globals MSApp */
+
+/**
+ * Create a function which has 'unsafe' privileges (required by windows8 apps)
+ */
+var createMicrosoftUnsafeLocalFunction = function (func) {
+  if (typeof MSApp !== 'undefined' && MSApp.execUnsafeLocalFunction) {
+    return function (arg0, arg1, arg2, arg3) {
+      MSApp.execUnsafeLocalFunction(function () {
+        return func(arg0, arg1, arg2, arg3);
+      });
+    };
+  } else {
+    return func;
+  }
+};
+
+var reusableSVGContainer;
+/**
+ * Set the innerHTML property of a node
+ *
+ * @param {DOMElement} node
+ * @param {string} html
+ * @internal
+ */
+
+var setInnerHTML = createMicrosoftUnsafeLocalFunction(function (node, html) {
+  if (node.namespaceURI === Namespaces.svg) {
+
+    if (!('innerHTML' in node)) {
+      // IE does not have innerHTML for SVG nodes, so instead we inject the
+      // new markup in a temp node and then move the child nodes across into
+      // the target node
+      reusableSVGContainer = reusableSVGContainer || document.createElement('div');
+      reusableSVGContainer.innerHTML = '<svg>' + html.valueOf().toString() + '</svg>';
+      var svgNode = reusableSVGContainer.firstChild;
+
+      while (node.firstChild) {
+        node.removeChild(node.firstChild);
+      }
+
+      while (svgNode.firstChild) {
+        node.appendChild(svgNode.firstChild);
+      }
+
+      return;
+    }
+  }
+
+  node.innerHTML = html;
+});
+
+/**
+ * HTML nodeType values that represent the type of the node
+ */
+var ELEMENT_NODE = 1;
+var TEXT_NODE = 3;
+var COMMENT_NODE = 8;
+var DOCUMENT_NODE = 9;
+var DOCUMENT_FRAGMENT_NODE = 11;
+
+/**
+ * Set the textContent property of a node. For text updates, it's faster
+ * to set the `nodeValue` of the Text node directly instead of using
+ * `.textContent` which will remove the existing node and create a new one.
+ *
+ * @param {DOMElement} node
+ * @param {string} text
+ * @internal
+ */
+
+var setTextContent = function (node, text) {
+  if (text) {
+    var firstChild = node.firstChild;
+
+    if (firstChild && firstChild === node.lastChild && firstChild.nodeType === TEXT_NODE) {
+      firstChild.nodeValue = text;
+      return;
+    }
+  }
+
+  node.textContent = text;
+};
+
+// Do not use the below two methods directly!
+// Instead use constants exported from DOMTopLevelEventTypes in ReactDOM.
+// (It is the only module that is allowed to access these methods.)
+function unsafeCastStringToDOMTopLevelType(topLevelType) {
+  return topLevelType;
+}
+function unsafeCastDOMTopLevelTypeToString(topLevelType) {
+  return topLevelType;
+}
+
+/**
+ * Generate a mapping of standard vendor prefixes using the defined style property and event name.
+ *
+ * @param {string} styleProp
+ * @param {string} eventName
+ * @returns {object}
+ */
+
+function makePrefixMap(styleProp, eventName) {
+  var prefixes = {};
+  prefixes[styleProp.toLowerCase()] = eventName.toLowerCase();
+  prefixes['Webkit' + styleProp] = 'webkit' + eventName;
+  prefixes['Moz' + styleProp] = 'moz' + eventName;
+  return prefixes;
+}
+/**
+ * A list of event names to a configurable list of vendor prefixes.
+ */
+
+
+var vendorPrefixes = {
+  animationend: makePrefixMap('Animation', 'AnimationEnd'),
+  animationiteration: makePrefixMap('Animation', 'AnimationIteration'),
+  animationstart: makePrefixMap('Animation', 'AnimationStart'),
+  transitionend: makePrefixMap('Transition', 'TransitionEnd')
+};
+/**
+ * Event names that have already been detected and prefixed (if applicable).
+ */
+
+var prefixedEventNames = {};
+/**
+ * Element to check for prefixes on.
+ */
+
+var style = {};
+/**
+ * Bootstrap if a DOM exists.
+ */
+
+if (canUseDOM) {
+  style = document.createElement('div').style; // On some platforms, in particular some releases of Android 4.x,
+  // the un-prefixed "animation" and "transition" properties are defined on the
+  // style object but the events that fire will still be p
