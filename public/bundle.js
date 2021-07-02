@@ -49760,4 +49760,309 @@ function findCurrentHostFiberWithNoPortals(parent) {
  */
 
 function accumulateInto(current, next) {
-  if (!(nex
+  if (!(next != null)) {
+    {
+      throw Error( "accumulateInto(...): Accumulated items must not be null or undefined." );
+    }
+  }
+
+  if (current == null) {
+    return next;
+  } // Both are not empty. Warning: Never call x.concat(y) when you are not
+  // certain that x is an Array (x could be a string with concat method).
+
+
+  if (Array.isArray(current)) {
+    if (Array.isArray(next)) {
+      current.push.apply(current, next);
+      return current;
+    }
+
+    current.push(next);
+    return current;
+  }
+
+  if (Array.isArray(next)) {
+    // A bit too dangerous to mutate `next`.
+    return [current].concat(next);
+  }
+
+  return [current, next];
+}
+
+/**
+ * @param {array} arr an "accumulation" of items which is either an Array or
+ * a single item. Useful when paired with the `accumulate` module. This is a
+ * simple utility that allows us to reason about a collection of items, but
+ * handling the case when there is exactly one item (and we do not need to
+ * allocate an array).
+ * @param {function} cb Callback invoked with each element or a collection.
+ * @param {?} [scope] Scope used as `this` in a callback.
+ */
+function forEachAccumulated(arr, cb, scope) {
+  if (Array.isArray(arr)) {
+    arr.forEach(cb, scope);
+  } else if (arr) {
+    cb.call(scope, arr);
+  }
+}
+
+/**
+ * Internal queue of events that have accumulated their dispatches and are
+ * waiting to have their dispatches executed.
+ */
+
+var eventQueue = null;
+/**
+ * Dispatches an event and releases it back into the pool, unless persistent.
+ *
+ * @param {?object} event Synthetic event to be dispatched.
+ * @private
+ */
+
+var executeDispatchesAndRelease = function (event) {
+  if (event) {
+    executeDispatchesInOrder(event);
+
+    if (!event.isPersistent()) {
+      event.constructor.release(event);
+    }
+  }
+};
+
+var executeDispatchesAndReleaseTopLevel = function (e) {
+  return executeDispatchesAndRelease(e);
+};
+
+function runEventsInBatch(events) {
+  if (events !== null) {
+    eventQueue = accumulateInto(eventQueue, events);
+  } // Set `eventQueue` to null before processing it so that we can tell if more
+  // events get enqueued while processing.
+
+
+  var processingEventQueue = eventQueue;
+  eventQueue = null;
+
+  if (!processingEventQueue) {
+    return;
+  }
+
+  forEachAccumulated(processingEventQueue, executeDispatchesAndReleaseTopLevel);
+
+  if (!!eventQueue) {
+    {
+      throw Error( "processEventQueue(): Additional events were enqueued while processing an event queue. Support for this has not yet been implemented." );
+    }
+  } // This would be a good time to rethrow if any of the event handlers threw.
+
+
+  rethrowCaughtError();
+}
+
+/**
+ * Gets the target node from a native browser event by accounting for
+ * inconsistencies in browser DOM APIs.
+ *
+ * @param {object} nativeEvent Native browser event.
+ * @return {DOMEventTarget} Target node.
+ */
+
+function getEventTarget(nativeEvent) {
+  // Fallback to nativeEvent.srcElement for IE9
+  // https://github.com/facebook/react/issues/12506
+  var target = nativeEvent.target || nativeEvent.srcElement || window; // Normalize SVG <use> element events #4963
+
+  if (target.correspondingUseElement) {
+    target = target.correspondingUseElement;
+  } // Safari may fire events on text nodes (Node.TEXT_NODE is 3).
+  // @see http://www.quirksmode.org/js/events_properties.html
+
+
+  return target.nodeType === TEXT_NODE ? target.parentNode : target;
+}
+
+/**
+ * Checks if an event is supported in the current execution environment.
+ *
+ * NOTE: This will not work correctly for non-generic events such as `change`,
+ * `reset`, `load`, `error`, and `select`.
+ *
+ * Borrows from Modernizr.
+ *
+ * @param {string} eventNameSuffix Event name, e.g. "click".
+ * @return {boolean} True if the event is supported.
+ * @internal
+ * @license Modernizr 3.0.0pre (Custom Build) | MIT
+ */
+
+function isEventSupported(eventNameSuffix) {
+  if (!canUseDOM) {
+    return false;
+  }
+
+  var eventName = 'on' + eventNameSuffix;
+  var isSupported = eventName in document;
+
+  if (!isSupported) {
+    var element = document.createElement('div');
+    element.setAttribute(eventName, 'return;');
+    isSupported = typeof element[eventName] === 'function';
+  }
+
+  return isSupported;
+}
+
+/**
+ * Summary of `DOMEventPluginSystem` event handling:
+ *
+ *  - Top-level delegation is used to trap most native browser events. This
+ *    may only occur in the main thread and is the responsibility of
+ *    ReactDOMEventListener, which is injected and can therefore support
+ *    pluggable event sources. This is the only work that occurs in the main
+ *    thread.
+ *
+ *  - We normalize and de-duplicate events to account for browser quirks. This
+ *    may be done in the worker thread.
+ *
+ *  - Forward these native events (with the associated top-level type used to
+ *    trap it) to `EventPluginRegistry`, which in turn will ask plugins if they want
+ *    to extract any synthetic events.
+ *
+ *  - The `EventPluginRegistry` will then process each event by annotating them with
+ *    "dispatches", a sequence of listeners and IDs that care about that event.
+ *
+ *  - The `EventPluginRegistry` then dispatches the events.
+ *
+ * Overview of React and the event system:
+ *
+ * +------------+    .
+ * |    DOM     |    .
+ * +------------+    .
+ *       |           .
+ *       v           .
+ * +------------+    .
+ * | ReactEvent |    .
+ * |  Listener  |    .
+ * +------------+    .                         +-----------+
+ *       |           .               +--------+|SimpleEvent|
+ *       |           .               |         |Plugin     |
+ * +-----|------+    .               v         +-----------+
+ * |     |      |    .    +--------------+                    +------------+
+ * |     +-----------.--->|PluginRegistry|                    |    Event   |
+ * |            |    .    |              |     +-----------+  | Propagators|
+ * | ReactEvent |    .    |              |     |TapEvent   |  |------------|
+ * |  Emitter   |    .    |              |<---+|Plugin     |  |other plugin|
+ * |            |    .    |              |     +-----------+  |  utilities |
+ * |     +-----------.--->|              |                    +------------+
+ * |     |      |    .    +--------------+
+ * +-----|------+    .                ^        +-----------+
+ *       |           .                |        |Enter/Leave|
+ *       +           .                +-------+|Plugin     |
+ * +-------------+   .                         +-----------+
+ * | application |   .
+ * |-------------|   .
+ * |             |   .
+ * |             |   .
+ * +-------------+   .
+ *                   .
+ *    React Core     .  General Purpose Event Plugin System
+ */
+
+var CALLBACK_BOOKKEEPING_POOL_SIZE = 10;
+var callbackBookkeepingPool = [];
+
+function releaseTopLevelCallbackBookKeeping(instance) {
+  instance.topLevelType = null;
+  instance.nativeEvent = null;
+  instance.targetInst = null;
+  instance.ancestors.length = 0;
+
+  if (callbackBookkeepingPool.length < CALLBACK_BOOKKEEPING_POOL_SIZE) {
+    callbackBookkeepingPool.push(instance);
+  }
+} // Used to store ancestor hierarchy in top level callback
+
+
+function getTopLevelCallbackBookKeeping(topLevelType, nativeEvent, targetInst, eventSystemFlags) {
+  if (callbackBookkeepingPool.length) {
+    var instance = callbackBookkeepingPool.pop();
+    instance.topLevelType = topLevelType;
+    instance.eventSystemFlags = eventSystemFlags;
+    instance.nativeEvent = nativeEvent;
+    instance.targetInst = targetInst;
+    return instance;
+  }
+
+  return {
+    topLevelType: topLevelType,
+    eventSystemFlags: eventSystemFlags,
+    nativeEvent: nativeEvent,
+    targetInst: targetInst,
+    ancestors: []
+  };
+}
+/**
+ * Find the deepest React component completely containing the root of the
+ * passed-in instance (for use when entire React trees are nested within each
+ * other). If React trees are not nested, returns null.
+ */
+
+
+function findRootContainerNode(inst) {
+  if (inst.tag === HostRoot) {
+    return inst.stateNode.containerInfo;
+  } // TODO: It may be a good idea to cache this to prevent unnecessary DOM
+  // traversal, but caching is difficult to do correctly without using a
+  // mutation observer to listen for all DOM changes.
+
+
+  while (inst.return) {
+    inst = inst.return;
+  }
+
+  if (inst.tag !== HostRoot) {
+    // This can happen if we're in a detached tree.
+    return null;
+  }
+
+  return inst.stateNode.containerInfo;
+}
+/**
+ * Allows registered plugins an opportunity to extract events from top-level
+ * native browser events.
+ *
+ * @return {*} An accumulation of synthetic events.
+ * @internal
+ */
+
+
+function extractPluginEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget, eventSystemFlags) {
+  var events = null;
+
+  for (var i = 0; i < plugins.length; i++) {
+    // Not every plugin in the ordering may be loaded at runtime.
+    var possiblePlugin = plugins[i];
+
+    if (possiblePlugin) {
+      var extractedEvents = possiblePlugin.extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget, eventSystemFlags);
+
+      if (extractedEvents) {
+        events = accumulateInto(events, extractedEvents);
+      }
+    }
+  }
+
+  return events;
+}
+
+function runExtractedPluginEventsInBatch(topLevelType, targetInst, nativeEvent, nativeEventTarget, eventSystemFlags) {
+  var events = extractPluginEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget, eventSystemFlags);
+  runEventsInBatch(events);
+}
+
+function handleTopLevel(bookKeeping) {
+  var targetInst = bookKeeping.targetInst; // Loop through the hierarchy, in case there's any nested components.
+  // It's important that we build the array of ancestors before calling any
+  // event handlers, because event handlers can modify the DOM, leading to
+  // inconsistencies with ReactMoun
