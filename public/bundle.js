@@ -50065,4 +50065,275 @@ function handleTopLevel(bookKeeping) {
   var targetInst = bookKeeping.targetInst; // Loop through the hierarchy, in case there's any nested components.
   // It's important that we build the array of ancestors before calling any
   // event handlers, because event handlers can modify the DOM, leading to
-  // inconsistencies with ReactMoun
+  // inconsistencies with ReactMount's node cache. See #1105.
+
+  var ancestor = targetInst;
+
+  do {
+    if (!ancestor) {
+      var ancestors = bookKeeping.ancestors;
+      ancestors.push(ancestor);
+      break;
+    }
+
+    var root = findRootContainerNode(ancestor);
+
+    if (!root) {
+      break;
+    }
+
+    var tag = ancestor.tag;
+
+    if (tag === HostComponent || tag === HostText) {
+      bookKeeping.ancestors.push(ancestor);
+    }
+
+    ancestor = getClosestInstanceFromNode(root);
+  } while (ancestor);
+
+  for (var i = 0; i < bookKeeping.ancestors.length; i++) {
+    targetInst = bookKeeping.ancestors[i];
+    var eventTarget = getEventTarget(bookKeeping.nativeEvent);
+    var topLevelType = bookKeeping.topLevelType;
+    var nativeEvent = bookKeeping.nativeEvent;
+    var eventSystemFlags = bookKeeping.eventSystemFlags; // If this is the first ancestor, we mark it on the system flags
+
+    if (i === 0) {
+      eventSystemFlags |= IS_FIRST_ANCESTOR;
+    }
+
+    runExtractedPluginEventsInBatch(topLevelType, targetInst, nativeEvent, eventTarget, eventSystemFlags);
+  }
+}
+
+function dispatchEventForLegacyPluginEventSystem(topLevelType, eventSystemFlags, nativeEvent, targetInst) {
+  var bookKeeping = getTopLevelCallbackBookKeeping(topLevelType, nativeEvent, targetInst, eventSystemFlags);
+
+  try {
+    // Event queue being processed in the same cycle allows
+    // `preventDefault`.
+    batchedEventUpdates(handleTopLevel, bookKeeping);
+  } finally {
+    releaseTopLevelCallbackBookKeeping(bookKeeping);
+  }
+}
+/**
+ * We listen for bubbled touch events on the document object.
+ *
+ * Firefox v8.01 (and possibly others) exhibited strange behavior when
+ * mounting `onmousemove` events at some node that was not the document
+ * element. The symptoms were that if your mouse is not moving over something
+ * contained within that mount point (for example on the background) the
+ * top-level listeners for `onmousemove` won't be called. However, if you
+ * register the `mousemove` on the document object, then it will of course
+ * catch all `mousemove`s. This along with iOS quirks, justifies restricting
+ * top-level listeners to the document object only, at least for these
+ * movement types of events and possibly all events.
+ *
+ * @see http://www.quirksmode.org/blog/archives/2010/09/click_event_del.html
+ *
+ * Also, `keyup`/`keypress`/`keydown` do not bubble to the window on IE, but
+ * they bubble to document.
+ *
+ * @param {string} registrationName Name of listener (e.g. `onClick`).
+ * @param {object} mountAt Container where to mount the listener
+ */
+
+function legacyListenToEvent(registrationName, mountAt) {
+  var listenerMap = getListenerMapForElement(mountAt);
+  var dependencies = registrationNameDependencies[registrationName];
+
+  for (var i = 0; i < dependencies.length; i++) {
+    var dependency = dependencies[i];
+    legacyListenToTopLevelEvent(dependency, mountAt, listenerMap);
+  }
+}
+function legacyListenToTopLevelEvent(topLevelType, mountAt, listenerMap) {
+  if (!listenerMap.has(topLevelType)) {
+    switch (topLevelType) {
+      case TOP_SCROLL:
+        trapCapturedEvent(TOP_SCROLL, mountAt);
+        break;
+
+      case TOP_FOCUS:
+      case TOP_BLUR:
+        trapCapturedEvent(TOP_FOCUS, mountAt);
+        trapCapturedEvent(TOP_BLUR, mountAt); // We set the flag for a single dependency later in this function,
+        // but this ensures we mark both as attached rather than just one.
+
+        listenerMap.set(TOP_BLUR, null);
+        listenerMap.set(TOP_FOCUS, null);
+        break;
+
+      case TOP_CANCEL:
+      case TOP_CLOSE:
+        if (isEventSupported(getRawEventName(topLevelType))) {
+          trapCapturedEvent(topLevelType, mountAt);
+        }
+
+        break;
+
+      case TOP_INVALID:
+      case TOP_SUBMIT:
+      case TOP_RESET:
+        // We listen to them on the target DOM elements.
+        // Some of them bubble so we don't want them to fire twice.
+        break;
+
+      default:
+        // By default, listen on the top level to all non-media events.
+        // Media events don't bubble so adding the listener wouldn't do anything.
+        var isMediaEvent = mediaEventTypes.indexOf(topLevelType) !== -1;
+
+        if (!isMediaEvent) {
+          trapBubbledEvent(topLevelType, mountAt);
+        }
+
+        break;
+    }
+
+    listenerMap.set(topLevelType, null);
+  }
+}
+function isListeningToAllDependencies(registrationName, mountAt) {
+  var listenerMap = getListenerMapForElement(mountAt);
+  var dependencies = registrationNameDependencies[registrationName];
+
+  for (var i = 0; i < dependencies.length; i++) {
+    var dependency = dependencies[i];
+
+    if (!listenerMap.has(dependency)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+var attemptUserBlockingHydration;
+function setAttemptUserBlockingHydration(fn) {
+  attemptUserBlockingHydration = fn;
+}
+var attemptContinuousHydration;
+function setAttemptContinuousHydration(fn) {
+  attemptContinuousHydration = fn;
+}
+var attemptHydrationAtCurrentPriority;
+function setAttemptHydrationAtCurrentPriority(fn) {
+  attemptHydrationAtCurrentPriority = fn;
+} // TODO: Upgrade this definition once we're on a newer version of Flow that
+var hasScheduledReplayAttempt = false; // The queue of discrete events to be replayed.
+
+var queuedDiscreteEvents = []; // Indicates if any continuous event targets are non-null for early bailout.
+// if the last target was dehydrated.
+
+var queuedFocus = null;
+var queuedDrag = null;
+var queuedMouse = null; // For pointer events there can be one latest event per pointerId.
+
+var queuedPointers = new Map();
+var queuedPointerCaptures = new Map(); // We could consider replaying selectionchange and touchmoves too.
+
+var queuedExplicitHydrationTargets = [];
+function hasQueuedDiscreteEvents() {
+  return queuedDiscreteEvents.length > 0;
+}
+var discreteReplayableEvents = [TOP_MOUSE_DOWN, TOP_MOUSE_UP, TOP_TOUCH_CANCEL, TOP_TOUCH_END, TOP_TOUCH_START, TOP_AUX_CLICK, TOP_DOUBLE_CLICK, TOP_POINTER_CANCEL, TOP_POINTER_DOWN, TOP_POINTER_UP, TOP_DRAG_END, TOP_DRAG_START, TOP_DROP, TOP_COMPOSITION_END, TOP_COMPOSITION_START, TOP_KEY_DOWN, TOP_KEY_PRESS, TOP_KEY_UP, TOP_INPUT, TOP_TEXT_INPUT, TOP_CLOSE, TOP_CANCEL, TOP_COPY, TOP_CUT, TOP_PASTE, TOP_CLICK, TOP_CHANGE, TOP_CONTEXT_MENU, TOP_RESET, TOP_SUBMIT];
+var continuousReplayableEvents = [TOP_FOCUS, TOP_BLUR, TOP_DRAG_ENTER, TOP_DRAG_LEAVE, TOP_MOUSE_OVER, TOP_MOUSE_OUT, TOP_POINTER_OVER, TOP_POINTER_OUT, TOP_GOT_POINTER_CAPTURE, TOP_LOST_POINTER_CAPTURE];
+function isReplayableDiscreteEvent(eventType) {
+  return discreteReplayableEvents.indexOf(eventType) > -1;
+}
+
+function trapReplayableEventForDocument(topLevelType, document, listenerMap) {
+  legacyListenToTopLevelEvent(topLevelType, document, listenerMap);
+}
+
+function eagerlyTrapReplayableEvents(container, document) {
+  var listenerMapForDoc = getListenerMapForElement(document); // Discrete
+
+  discreteReplayableEvents.forEach(function (topLevelType) {
+    trapReplayableEventForDocument(topLevelType, document, listenerMapForDoc);
+  }); // Continuous
+
+  continuousReplayableEvents.forEach(function (topLevelType) {
+    trapReplayableEventForDocument(topLevelType, document, listenerMapForDoc);
+  });
+}
+
+function createQueuedReplayableEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent) {
+  return {
+    blockedOn: blockedOn,
+    topLevelType: topLevelType,
+    eventSystemFlags: eventSystemFlags | IS_REPLAYED,
+    nativeEvent: nativeEvent,
+    container: container
+  };
+}
+
+function queueDiscreteEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent) {
+  var queuedEvent = createQueuedReplayableEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent);
+  queuedDiscreteEvents.push(queuedEvent);
+} // Resets the replaying for this type of continuous event to no event.
+
+function clearIfContinuousEvent(topLevelType, nativeEvent) {
+  switch (topLevelType) {
+    case TOP_FOCUS:
+    case TOP_BLUR:
+      queuedFocus = null;
+      break;
+
+    case TOP_DRAG_ENTER:
+    case TOP_DRAG_LEAVE:
+      queuedDrag = null;
+      break;
+
+    case TOP_MOUSE_OVER:
+    case TOP_MOUSE_OUT:
+      queuedMouse = null;
+      break;
+
+    case TOP_POINTER_OVER:
+    case TOP_POINTER_OUT:
+      {
+        var pointerId = nativeEvent.pointerId;
+        queuedPointers.delete(pointerId);
+        break;
+      }
+
+    case TOP_GOT_POINTER_CAPTURE:
+    case TOP_LOST_POINTER_CAPTURE:
+      {
+        var _pointerId = nativeEvent.pointerId;
+        queuedPointerCaptures.delete(_pointerId);
+        break;
+      }
+  }
+}
+
+function accumulateOrCreateContinuousQueuedReplayableEvent(existingQueuedEvent, blockedOn, topLevelType, eventSystemFlags, container, nativeEvent) {
+  if (existingQueuedEvent === null || existingQueuedEvent.nativeEvent !== nativeEvent) {
+    var queuedEvent = createQueuedReplayableEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent);
+
+    if (blockedOn !== null) {
+      var _fiber2 = getInstanceFromNode$1(blockedOn);
+
+      if (_fiber2 !== null) {
+        // Attempt to increase the priority of this target.
+        attemptContinuousHydration(_fiber2);
+      }
+    }
+
+    return queuedEvent;
+  } // If we have already queued this exact event, then it's because
+  // the different event systems have different DOM event listeners.
+  // We can accumulate the flags and store a single event to be
+  // replayed.
+
+
+  existingQueuedEvent.eventSystemFlags |= eventSystemFlags;
+  return existingQueuedEvent;
+}
+
+function queueIfContinuousEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent) {
+  // These set relatedTarget to null because the replayed event will be treated as if we
+  // moved from outside the window (no target) 
