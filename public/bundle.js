@@ -50336,4 +50336,265 @@ function accumulateOrCreateContinuousQueuedReplayableEvent(existingQueuedEvent, 
 
 function queueIfContinuousEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent) {
   // These set relatedTarget to null because the replayed event will be treated as if we
-  // moved from outside the window (no target) 
+  // moved from outside the window (no target) onto the target once it hydrates.
+  // Instead of mutating we could clone the event.
+  switch (topLevelType) {
+    case TOP_FOCUS:
+      {
+        var focusEvent = nativeEvent;
+        queuedFocus = accumulateOrCreateContinuousQueuedReplayableEvent(queuedFocus, blockedOn, topLevelType, eventSystemFlags, container, focusEvent);
+        return true;
+      }
+
+    case TOP_DRAG_ENTER:
+      {
+        var dragEvent = nativeEvent;
+        queuedDrag = accumulateOrCreateContinuousQueuedReplayableEvent(queuedDrag, blockedOn, topLevelType, eventSystemFlags, container, dragEvent);
+        return true;
+      }
+
+    case TOP_MOUSE_OVER:
+      {
+        var mouseEvent = nativeEvent;
+        queuedMouse = accumulateOrCreateContinuousQueuedReplayableEvent(queuedMouse, blockedOn, topLevelType, eventSystemFlags, container, mouseEvent);
+        return true;
+      }
+
+    case TOP_POINTER_OVER:
+      {
+        var pointerEvent = nativeEvent;
+        var pointerId = pointerEvent.pointerId;
+        queuedPointers.set(pointerId, accumulateOrCreateContinuousQueuedReplayableEvent(queuedPointers.get(pointerId) || null, blockedOn, topLevelType, eventSystemFlags, container, pointerEvent));
+        return true;
+      }
+
+    case TOP_GOT_POINTER_CAPTURE:
+      {
+        var _pointerEvent = nativeEvent;
+        var _pointerId2 = _pointerEvent.pointerId;
+        queuedPointerCaptures.set(_pointerId2, accumulateOrCreateContinuousQueuedReplayableEvent(queuedPointerCaptures.get(_pointerId2) || null, blockedOn, topLevelType, eventSystemFlags, container, _pointerEvent));
+        return true;
+      }
+  }
+
+  return false;
+} // Check if this target is unblocked. Returns true if it's unblocked.
+
+function attemptExplicitHydrationTarget(queuedTarget) {
+  // TODO: This function shares a lot of logic with attemptToDispatchEvent.
+  // Try to unify them. It's a bit tricky since it would require two return
+  // values.
+  var targetInst = getClosestInstanceFromNode(queuedTarget.target);
+
+  if (targetInst !== null) {
+    var nearestMounted = getNearestMountedFiber(targetInst);
+
+    if (nearestMounted !== null) {
+      var tag = nearestMounted.tag;
+
+      if (tag === SuspenseComponent) {
+        var instance = getSuspenseInstanceFromFiber(nearestMounted);
+
+        if (instance !== null) {
+          // We're blocked on hydrating this boundary.
+          // Increase its priority.
+          queuedTarget.blockedOn = instance;
+          Scheduler.unstable_runWithPriority(queuedTarget.priority, function () {
+            attemptHydrationAtCurrentPriority(nearestMounted);
+          });
+          return;
+        }
+      } else if (tag === HostRoot) {
+        var root = nearestMounted.stateNode;
+
+        if (root.hydrate) {
+          queuedTarget.blockedOn = getContainerFromFiber(nearestMounted); // We don't currently have a way to increase the priority of
+          // a root other than sync.
+
+          return;
+        }
+      }
+    }
+  }
+
+  queuedTarget.blockedOn = null;
+}
+
+function attemptReplayContinuousQueuedEvent(queuedEvent) {
+  if (queuedEvent.blockedOn !== null) {
+    return false;
+  }
+
+  var nextBlockedOn = attemptToDispatchEvent(queuedEvent.topLevelType, queuedEvent.eventSystemFlags, queuedEvent.container, queuedEvent.nativeEvent);
+
+  if (nextBlockedOn !== null) {
+    // We're still blocked. Try again later.
+    var _fiber3 = getInstanceFromNode$1(nextBlockedOn);
+
+    if (_fiber3 !== null) {
+      attemptContinuousHydration(_fiber3);
+    }
+
+    queuedEvent.blockedOn = nextBlockedOn;
+    return false;
+  }
+
+  return true;
+}
+
+function attemptReplayContinuousQueuedEventInMap(queuedEvent, key, map) {
+  if (attemptReplayContinuousQueuedEvent(queuedEvent)) {
+    map.delete(key);
+  }
+}
+
+function replayUnblockedEvents() {
+  hasScheduledReplayAttempt = false; // First replay discrete events.
+
+  while (queuedDiscreteEvents.length > 0) {
+    var nextDiscreteEvent = queuedDiscreteEvents[0];
+
+    if (nextDiscreteEvent.blockedOn !== null) {
+      // We're still blocked.
+      // Increase the priority of this boundary to unblock
+      // the next discrete event.
+      var _fiber4 = getInstanceFromNode$1(nextDiscreteEvent.blockedOn);
+
+      if (_fiber4 !== null) {
+        attemptUserBlockingHydration(_fiber4);
+      }
+
+      break;
+    }
+
+    var nextBlockedOn = attemptToDispatchEvent(nextDiscreteEvent.topLevelType, nextDiscreteEvent.eventSystemFlags, nextDiscreteEvent.container, nextDiscreteEvent.nativeEvent);
+
+    if (nextBlockedOn !== null) {
+      // We're still blocked. Try again later.
+      nextDiscreteEvent.blockedOn = nextBlockedOn;
+    } else {
+      // We've successfully replayed the first event. Let's try the next one.
+      queuedDiscreteEvents.shift();
+    }
+  } // Next replay any continuous events.
+
+
+  if (queuedFocus !== null && attemptReplayContinuousQueuedEvent(queuedFocus)) {
+    queuedFocus = null;
+  }
+
+  if (queuedDrag !== null && attemptReplayContinuousQueuedEvent(queuedDrag)) {
+    queuedDrag = null;
+  }
+
+  if (queuedMouse !== null && attemptReplayContinuousQueuedEvent(queuedMouse)) {
+    queuedMouse = null;
+  }
+
+  queuedPointers.forEach(attemptReplayContinuousQueuedEventInMap);
+  queuedPointerCaptures.forEach(attemptReplayContinuousQueuedEventInMap);
+}
+
+function scheduleCallbackIfUnblocked(queuedEvent, unblocked) {
+  if (queuedEvent.blockedOn === unblocked) {
+    queuedEvent.blockedOn = null;
+
+    if (!hasScheduledReplayAttempt) {
+      hasScheduledReplayAttempt = true; // Schedule a callback to attempt replaying as many events as are
+      // now unblocked. This first might not actually be unblocked yet.
+      // We could check it early to avoid scheduling an unnecessary callback.
+
+      Scheduler.unstable_scheduleCallback(Scheduler.unstable_NormalPriority, replayUnblockedEvents);
+    }
+  }
+}
+
+function retryIfBlockedOn(unblocked) {
+  // Mark anything that was blocked on this as no longer blocked
+  // and eligible for a replay.
+  if (queuedDiscreteEvents.length > 0) {
+    scheduleCallbackIfUnblocked(queuedDiscreteEvents[0], unblocked); // This is a exponential search for each boundary that commits. I think it's
+    // worth it because we expect very few discrete events to queue up and once
+    // we are actually fully unblocked it will be fast to replay them.
+
+    for (var i = 1; i < queuedDiscreteEvents.length; i++) {
+      var queuedEvent = queuedDiscreteEvents[i];
+
+      if (queuedEvent.blockedOn === unblocked) {
+        queuedEvent.blockedOn = null;
+      }
+    }
+  }
+
+  if (queuedFocus !== null) {
+    scheduleCallbackIfUnblocked(queuedFocus, unblocked);
+  }
+
+  if (queuedDrag !== null) {
+    scheduleCallbackIfUnblocked(queuedDrag, unblocked);
+  }
+
+  if (queuedMouse !== null) {
+    scheduleCallbackIfUnblocked(queuedMouse, unblocked);
+  }
+
+  var unblock = function (queuedEvent) {
+    return scheduleCallbackIfUnblocked(queuedEvent, unblocked);
+  };
+
+  queuedPointers.forEach(unblock);
+  queuedPointerCaptures.forEach(unblock);
+
+  for (var _i = 0; _i < queuedExplicitHydrationTargets.length; _i++) {
+    var queuedTarget = queuedExplicitHydrationTargets[_i];
+
+    if (queuedTarget.blockedOn === unblocked) {
+      queuedTarget.blockedOn = null;
+    }
+  }
+
+  while (queuedExplicitHydrationTargets.length > 0) {
+    var nextExplicitTarget = queuedExplicitHydrationTargets[0];
+
+    if (nextExplicitTarget.blockedOn !== null) {
+      // We're still blocked.
+      break;
+    } else {
+      attemptExplicitHydrationTarget(nextExplicitTarget);
+
+      if (nextExplicitTarget.blockedOn === null) {
+        // We're unblocked.
+        queuedExplicitHydrationTargets.shift();
+      }
+    }
+  }
+}
+
+function addEventBubbleListener(element, eventType, listener) {
+  element.addEventListener(eventType, listener, false);
+}
+function addEventCaptureListener(element, eventType, listener) {
+  element.addEventListener(eventType, listener, true);
+}
+
+// do it in two places, which duplicates logic
+// and increases the bundle size, we do it all
+// here once. If we remove or refactor the
+// SimpleEventPlugin, we should also remove or
+// update the below line.
+
+var simpleEventPluginEventTypes = {};
+var topLevelEventsToDispatchConfig = new Map();
+var eventPriorities = new Map(); // We store most of the events in this module in pairs of two strings so we can re-use
+// the code required to apply the same logic for event prioritization and that of the
+// SimpleEventPlugin. This complicates things slightly, but the aim is to reduce code
+// duplication (for which there would be quite a bit). For the events that are not needed
+// for the SimpleEventPlugin (otherDiscreteEvents) we process them separately as an
+// array of top level events.
+// Lastly, we ignore prettier so we can keep the formatting sane.
+// prettier-ignore
+
+var discreteEventPairsForSimpleEventPlugin = [TOP_BLUR, 'blur', TOP_CANCEL, 'cancel', TOP_CLICK, 'click', TOP_CLOSE, 'close', TOP_CONTEXT_MENU, 'contextMenu', TOP_COPY, 'copy', TOP_CUT, 'cut', TOP_AUX_CLICK, 'auxClick', TOP_DOUBLE_CLICK, 'doubleClick', TOP_DRAG_END, 'dragEnd', TOP_DRAG_START, 'dragStart', TOP_DROP, 'drop', TOP_FOCUS, 'focus', TOP_INPUT, 'input', TOP_INVALID, 'invalid', TOP_KEY_DOWN, 'keyDown', TOP_KEY_PRESS, 'keyPress', TOP_KEY_UP, 'keyUp', TOP_MOUSE_DOWN, 'mouseDown', TOP_MOUSE_UP, 'mouseUp', TOP_PASTE, 'paste', TOP_PAUSE, 'pause', TOP_PLAY, 'play', TOP_POINTER_CANCEL, 'pointerCancel', TOP_POINTER_DOWN, 'pointerDown', TOP_POINTER_UP, 'pointerUp', TOP_RATE_CHANGE, 'rateChange', TOP_RESET, 'reset', TOP_SEEKED, 'seeked', TOP_SUBMIT, 'submit', TOP_TOUCH_CANCEL, 'touchCancel', TOP_TOUCH_END, 'touchEnd', TOP_TOUCH_START, 'touchStart', TOP_VOLUME_CHANGE, 'volumeChange'];
+var otherDiscreteEvents = [TOP_CHANGE, TOP_SELECTION_CHANGE, TOP_TEXT_INPUT, TOP_COMPOSITION_START, TOP_COMPOSITION_END, TOP_COMPOSITION_UPDATE]; // prettier-ignore
+
+var userBloc
