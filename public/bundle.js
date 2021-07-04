@@ -50597,4 +50597,229 @@ var eventPriorities = new Map(); // We store most of the events in this module i
 var discreteEventPairsForSimpleEventPlugin = [TOP_BLUR, 'blur', TOP_CANCEL, 'cancel', TOP_CLICK, 'click', TOP_CLOSE, 'close', TOP_CONTEXT_MENU, 'contextMenu', TOP_COPY, 'copy', TOP_CUT, 'cut', TOP_AUX_CLICK, 'auxClick', TOP_DOUBLE_CLICK, 'doubleClick', TOP_DRAG_END, 'dragEnd', TOP_DRAG_START, 'dragStart', TOP_DROP, 'drop', TOP_FOCUS, 'focus', TOP_INPUT, 'input', TOP_INVALID, 'invalid', TOP_KEY_DOWN, 'keyDown', TOP_KEY_PRESS, 'keyPress', TOP_KEY_UP, 'keyUp', TOP_MOUSE_DOWN, 'mouseDown', TOP_MOUSE_UP, 'mouseUp', TOP_PASTE, 'paste', TOP_PAUSE, 'pause', TOP_PLAY, 'play', TOP_POINTER_CANCEL, 'pointerCancel', TOP_POINTER_DOWN, 'pointerDown', TOP_POINTER_UP, 'pointerUp', TOP_RATE_CHANGE, 'rateChange', TOP_RESET, 'reset', TOP_SEEKED, 'seeked', TOP_SUBMIT, 'submit', TOP_TOUCH_CANCEL, 'touchCancel', TOP_TOUCH_END, 'touchEnd', TOP_TOUCH_START, 'touchStart', TOP_VOLUME_CHANGE, 'volumeChange'];
 var otherDiscreteEvents = [TOP_CHANGE, TOP_SELECTION_CHANGE, TOP_TEXT_INPUT, TOP_COMPOSITION_START, TOP_COMPOSITION_END, TOP_COMPOSITION_UPDATE]; // prettier-ignore
 
-var userBloc
+var userBlockingPairsForSimpleEventPlugin = [TOP_DRAG, 'drag', TOP_DRAG_ENTER, 'dragEnter', TOP_DRAG_EXIT, 'dragExit', TOP_DRAG_LEAVE, 'dragLeave', TOP_DRAG_OVER, 'dragOver', TOP_MOUSE_MOVE, 'mouseMove', TOP_MOUSE_OUT, 'mouseOut', TOP_MOUSE_OVER, 'mouseOver', TOP_POINTER_MOVE, 'pointerMove', TOP_POINTER_OUT, 'pointerOut', TOP_POINTER_OVER, 'pointerOver', TOP_SCROLL, 'scroll', TOP_TOGGLE, 'toggle', TOP_TOUCH_MOVE, 'touchMove', TOP_WHEEL, 'wheel']; // prettier-ignore
+
+var continuousPairsForSimpleEventPlugin = [TOP_ABORT, 'abort', TOP_ANIMATION_END, 'animationEnd', TOP_ANIMATION_ITERATION, 'animationIteration', TOP_ANIMATION_START, 'animationStart', TOP_CAN_PLAY, 'canPlay', TOP_CAN_PLAY_THROUGH, 'canPlayThrough', TOP_DURATION_CHANGE, 'durationChange', TOP_EMPTIED, 'emptied', TOP_ENCRYPTED, 'encrypted', TOP_ENDED, 'ended', TOP_ERROR, 'error', TOP_GOT_POINTER_CAPTURE, 'gotPointerCapture', TOP_LOAD, 'load', TOP_LOADED_DATA, 'loadedData', TOP_LOADED_METADATA, 'loadedMetadata', TOP_LOAD_START, 'loadStart', TOP_LOST_POINTER_CAPTURE, 'lostPointerCapture', TOP_PLAYING, 'playing', TOP_PROGRESS, 'progress', TOP_SEEKING, 'seeking', TOP_STALLED, 'stalled', TOP_SUSPEND, 'suspend', TOP_TIME_UPDATE, 'timeUpdate', TOP_TRANSITION_END, 'transitionEnd', TOP_WAITING, 'waiting'];
+/**
+ * Turns
+ * ['abort', ...]
+ * into
+ * eventTypes = {
+ *   'abort': {
+ *     phasedRegistrationNames: {
+ *       bubbled: 'onAbort',
+ *       captured: 'onAbortCapture',
+ *     },
+ *     dependencies: [TOP_ABORT],
+ *   },
+ *   ...
+ * };
+ * topLevelEventsToDispatchConfig = new Map([
+ *   [TOP_ABORT, { sameConfig }],
+ * ]);
+ */
+
+function processSimpleEventPluginPairsByPriority(eventTypes, priority) {
+  // As the event types are in pairs of two, we need to iterate
+  // through in twos. The events are in pairs of two to save code
+  // and improve init perf of processing this array, as it will
+  // result in far fewer object allocations and property accesses
+  // if we only use three arrays to process all the categories of
+  // instead of tuples.
+  for (var i = 0; i < eventTypes.length; i += 2) {
+    var topEvent = eventTypes[i];
+    var event = eventTypes[i + 1];
+    var capitalizedEvent = event[0].toUpperCase() + event.slice(1);
+    var onEvent = 'on' + capitalizedEvent;
+    var config = {
+      phasedRegistrationNames: {
+        bubbled: onEvent,
+        captured: onEvent + 'Capture'
+      },
+      dependencies: [topEvent],
+      eventPriority: priority
+    };
+    eventPriorities.set(topEvent, priority);
+    topLevelEventsToDispatchConfig.set(topEvent, config);
+    simpleEventPluginEventTypes[event] = config;
+  }
+}
+
+function processTopEventPairsByPriority(eventTypes, priority) {
+  for (var i = 0; i < eventTypes.length; i++) {
+    eventPriorities.set(eventTypes[i], priority);
+  }
+} // SimpleEventPlugin
+
+
+processSimpleEventPluginPairsByPriority(discreteEventPairsForSimpleEventPlugin, DiscreteEvent);
+processSimpleEventPluginPairsByPriority(userBlockingPairsForSimpleEventPlugin, UserBlockingEvent);
+processSimpleEventPluginPairsByPriority(continuousPairsForSimpleEventPlugin, ContinuousEvent); // Not used by SimpleEventPlugin
+
+processTopEventPairsByPriority(otherDiscreteEvents, DiscreteEvent);
+function getEventPriorityForPluginSystem(topLevelType) {
+  var priority = eventPriorities.get(topLevelType); // Default to a ContinuousEvent. Note: we might
+  // want to warn if we can't detect the priority
+  // for the event.
+
+  return priority === undefined ? ContinuousEvent : priority;
+}
+
+// Intentionally not named imports because Rollup would use dynamic dispatch for
+var UserBlockingPriority = Scheduler.unstable_UserBlockingPriority,
+    runWithPriority = Scheduler.unstable_runWithPriority; // TODO: can we stop exporting these?
+
+var _enabled = true;
+function setEnabled(enabled) {
+  _enabled = !!enabled;
+}
+function isEnabled() {
+  return _enabled;
+}
+function trapBubbledEvent(topLevelType, element) {
+  trapEventForPluginEventSystem(element, topLevelType, false);
+}
+function trapCapturedEvent(topLevelType, element) {
+  trapEventForPluginEventSystem(element, topLevelType, true);
+}
+
+function trapEventForPluginEventSystem(container, topLevelType, capture) {
+  var listener;
+
+  switch (getEventPriorityForPluginSystem(topLevelType)) {
+    case DiscreteEvent:
+      listener = dispatchDiscreteEvent.bind(null, topLevelType, PLUGIN_EVENT_SYSTEM, container);
+      break;
+
+    case UserBlockingEvent:
+      listener = dispatchUserBlockingUpdate.bind(null, topLevelType, PLUGIN_EVENT_SYSTEM, container);
+      break;
+
+    case ContinuousEvent:
+    default:
+      listener = dispatchEvent.bind(null, topLevelType, PLUGIN_EVENT_SYSTEM, container);
+      break;
+  }
+
+  var rawEventName = getRawEventName(topLevelType);
+
+  if (capture) {
+    addEventCaptureListener(container, rawEventName, listener);
+  } else {
+    addEventBubbleListener(container, rawEventName, listener);
+  }
+}
+
+function dispatchDiscreteEvent(topLevelType, eventSystemFlags, container, nativeEvent) {
+  flushDiscreteUpdatesIfNeeded(nativeEvent.timeStamp);
+  discreteUpdates(dispatchEvent, topLevelType, eventSystemFlags, container, nativeEvent);
+}
+
+function dispatchUserBlockingUpdate(topLevelType, eventSystemFlags, container, nativeEvent) {
+  runWithPriority(UserBlockingPriority, dispatchEvent.bind(null, topLevelType, eventSystemFlags, container, nativeEvent));
+}
+
+function dispatchEvent(topLevelType, eventSystemFlags, container, nativeEvent) {
+  if (!_enabled) {
+    return;
+  }
+
+  if (hasQueuedDiscreteEvents() && isReplayableDiscreteEvent(topLevelType)) {
+    // If we already have a queue of discrete events, and this is another discrete
+    // event, then we can't dispatch it regardless of its target, since they
+    // need to dispatch in order.
+    queueDiscreteEvent(null, // Flags that we're not actually blocked on anything as far as we know.
+    topLevelType, eventSystemFlags, container, nativeEvent);
+    return;
+  }
+
+  var blockedOn = attemptToDispatchEvent(topLevelType, eventSystemFlags, container, nativeEvent);
+
+  if (blockedOn === null) {
+    // We successfully dispatched this event.
+    clearIfContinuousEvent(topLevelType, nativeEvent);
+    return;
+  }
+
+  if (isReplayableDiscreteEvent(topLevelType)) {
+    // This this to be replayed later once the target is available.
+    queueDiscreteEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent);
+    return;
+  }
+
+  if (queueIfContinuousEvent(blockedOn, topLevelType, eventSystemFlags, container, nativeEvent)) {
+    return;
+  } // We need to clear only if we didn't queue because
+  // queueing is accummulative.
+
+
+  clearIfContinuousEvent(topLevelType, nativeEvent); // This is not replayable so we'll invoke it but without a target,
+  // in case the event system needs to trace it.
+
+  {
+    dispatchEventForLegacyPluginEventSystem(topLevelType, eventSystemFlags, nativeEvent, null);
+  }
+} // Attempt dispatching an event. Returns a SuspenseInstance or Container if it's blocked.
+
+function attemptToDispatchEvent(topLevelType, eventSystemFlags, container, nativeEvent) {
+  // TODO: Warn if _enabled is false.
+  var nativeEventTarget = getEventTarget(nativeEvent);
+  var targetInst = getClosestInstanceFromNode(nativeEventTarget);
+
+  if (targetInst !== null) {
+    var nearestMounted = getNearestMountedFiber(targetInst);
+
+    if (nearestMounted === null) {
+      // This tree has been unmounted already. Dispatch without a target.
+      targetInst = null;
+    } else {
+      var tag = nearestMounted.tag;
+
+      if (tag === SuspenseComponent) {
+        var instance = getSuspenseInstanceFromFiber(nearestMounted);
+
+        if (instance !== null) {
+          // Queue the event to be replayed later. Abort dispatching since we
+          // don't want this event dispatched twice through the event system.
+          // TODO: If this is the first discrete event in the queue. Schedule an increased
+          // priority for this boundary.
+          return instance;
+        } // This shouldn't happen, something went wrong but to avoid blocking
+        // the whole system, dispatch the event without a target.
+        // TODO: Warn.
+
+
+        targetInst = null;
+      } else if (tag === HostRoot) {
+        var root = nearestMounted.stateNode;
+
+        if (root.hydrate) {
+          // If this happens during a replay something went wrong and it might block
+          // the whole system.
+          return getContainerFromFiber(nearestMounted);
+        }
+
+        targetInst = null;
+      } else if (nearestMounted !== targetInst) {
+        // If we get an event (ex: img onload) before committing that
+        // component's mount, ignore it for now (that is, treat it as if it was an
+        // event on a non-React tree). We might also consider queueing events and
+        // dispatching them after the mount.
+        targetInst = null;
+      }
+    }
+  }
+
+  {
+    dispatchEventForLegacyPluginEventSystem(topLevelType, eventSystemFlags, nativeEvent, targetInst);
+  } // We're not blocked on anything.
+
+
+  return null;
+}
+
+// List derived from Gecko source code:
+// https://github.com/mozilla/gecko-dev/blob/4e638efc71/layout/style/test/property_database.js
+var shorthandToLonghand = {
+  animation: ['animationDelay', 'animationDirection', 'animationDuration', 'animationFillMode', 'animationIterationCount', 'animationName', 'animationPlayState', 'animationTimingFunction'],
+  background: ['backgroundAttachment', 'backgroundClip', 'backgroundColor', 'backgroundImage', 'backgroundOrigin', 'backgroundPositionX', 'backgroundPositionY', 'backgroundRepeat', 'back
