@@ -52065,4 +52065,237 @@ var validateProperty$1 = function () {};
     }
 
     if (lowerCasedName === 'is' && value !== null && value !== undefined && typeof value !== 'string') {
-      error('Received a `%s` for a string attribute `is`. If thi
+      error('Received a `%s` for a string attribute `is`. If this is expected, cast ' + 'the value to a string.', typeof value);
+
+      warnedProperties$1[name] = true;
+      return true;
+    }
+
+    if (typeof value === 'number' && isNaN(value)) {
+      error('Received NaN for the `%s` attribute. If this is expected, cast ' + 'the value to a string.', name);
+
+      warnedProperties$1[name] = true;
+      return true;
+    }
+
+    var propertyInfo = getPropertyInfo(name);
+    var isReserved = propertyInfo !== null && propertyInfo.type === RESERVED; // Known attributes should match the casing specified in the property config.
+
+    if (possibleStandardNames.hasOwnProperty(lowerCasedName)) {
+      var standardName = possibleStandardNames[lowerCasedName];
+
+      if (standardName !== name) {
+        error('Invalid DOM property `%s`. Did you mean `%s`?', name, standardName);
+
+        warnedProperties$1[name] = true;
+        return true;
+      }
+    } else if (!isReserved && name !== lowerCasedName) {
+      // Unknown attributes should have lowercase casing since that's how they
+      // will be cased anyway with server rendering.
+      error('React does not recognize the `%s` prop on a DOM element. If you ' + 'intentionally want it to appear in the DOM as a custom ' + 'attribute, spell it as lowercase `%s` instead. ' + 'If you accidentally passed it from a parent component, remove ' + 'it from the DOM element.', name, lowerCasedName);
+
+      warnedProperties$1[name] = true;
+      return true;
+    }
+
+    if (typeof value === 'boolean' && shouldRemoveAttributeWithWarning(name, value, propertyInfo, false)) {
+      if (value) {
+        error('Received `%s` for a non-boolean attribute `%s`.\n\n' + 'If you want to write it to the DOM, pass a string instead: ' + '%s="%s" or %s={value.toString()}.', value, name, name, value, name);
+      } else {
+        error('Received `%s` for a non-boolean attribute `%s`.\n\n' + 'If you want to write it to the DOM, pass a string instead: ' + '%s="%s" or %s={value.toString()}.\n\n' + 'If you used to conditionally omit it with %s={condition && value}, ' + 'pass %s={condition ? value : undefined} instead.', value, name, name, value, name, name, name);
+      }
+
+      warnedProperties$1[name] = true;
+      return true;
+    } // Now that we've validated casing, do not validate
+    // data types for reserved props
+
+
+    if (isReserved) {
+      return true;
+    } // Warn when a known attribute is a bad type
+
+
+    if (shouldRemoveAttributeWithWarning(name, value, propertyInfo, false)) {
+      warnedProperties$1[name] = true;
+      return false;
+    } // Warn when passing the strings 'false' or 'true' into a boolean prop
+
+
+    if ((value === 'false' || value === 'true') && propertyInfo !== null && propertyInfo.type === BOOLEAN) {
+      error('Received the string `%s` for the boolean attribute `%s`. ' + '%s ' + 'Did you mean %s={%s}?', value, name, value === 'false' ? 'The browser will interpret it as a truthy value.' : 'Although this works, it will not work as expected if you pass the string "false".', name, value);
+
+      warnedProperties$1[name] = true;
+      return true;
+    }
+
+    return true;
+  };
+}
+
+var warnUnknownProperties = function (type, props, canUseEventSystem) {
+  {
+    var unknownProps = [];
+
+    for (var key in props) {
+      var isValid = validateProperty$1(type, key, props[key], canUseEventSystem);
+
+      if (!isValid) {
+        unknownProps.push(key);
+      }
+    }
+
+    var unknownPropString = unknownProps.map(function (prop) {
+      return '`' + prop + '`';
+    }).join(', ');
+
+    if (unknownProps.length === 1) {
+      error('Invalid value for prop %s on <%s> tag. Either remove it from the element, ' + 'or pass a string or number value to keep it in the DOM. ' + 'For details, see https://fb.me/react-attribute-behavior', unknownPropString, type);
+    } else if (unknownProps.length > 1) {
+      error('Invalid values for props %s on <%s> tag. Either remove them from the element, ' + 'or pass a string or number value to keep them in the DOM. ' + 'For details, see https://fb.me/react-attribute-behavior', unknownPropString, type);
+    }
+  }
+};
+
+function validateProperties$2(type, props, canUseEventSystem) {
+  if (isCustomComponent(type, props)) {
+    return;
+  }
+
+  warnUnknownProperties(type, props, canUseEventSystem);
+}
+
+var didWarnInvalidHydration = false;
+var DANGEROUSLY_SET_INNER_HTML = 'dangerouslySetInnerHTML';
+var SUPPRESS_CONTENT_EDITABLE_WARNING = 'suppressContentEditableWarning';
+var SUPPRESS_HYDRATION_WARNING = 'suppressHydrationWarning';
+var AUTOFOCUS = 'autoFocus';
+var CHILDREN = 'children';
+var STYLE = 'style';
+var HTML$1 = '__html';
+var HTML_NAMESPACE$1 = Namespaces.html;
+var warnedUnknownTags;
+var suppressHydrationWarning;
+var validatePropertiesInDevelopment;
+var warnForTextDifference;
+var warnForPropDifference;
+var warnForExtraAttributes;
+var warnForInvalidEventListener;
+var canDiffStyleForHydrationWarning;
+var normalizeMarkupForTextOrAttribute;
+var normalizeHTML;
+
+{
+  warnedUnknownTags = {
+    // Chrome is the only major browser not shipping <time>. But as of July
+    // 2017 it intends to ship it due to widespread usage. We intentionally
+    // *don't* warn for <time> even if it's unrecognized by Chrome because
+    // it soon will be, and many apps have been using it anyway.
+    time: true,
+    // There are working polyfills for <dialog>. Let people use it.
+    dialog: true,
+    // Electron ships a custom <webview> tag to display external web content in
+    // an isolated frame and process.
+    // This tag is not present in non Electron environments such as JSDom which
+    // is often used for testing purposes.
+    // @see https://electronjs.org/docs/api/webview-tag
+    webview: true
+  };
+
+  validatePropertiesInDevelopment = function (type, props) {
+    validateProperties(type, props);
+    validateProperties$1(type, props);
+    validateProperties$2(type, props,
+    /* canUseEventSystem */
+    true);
+  }; // IE 11 parses & normalizes the style attribute as opposed to other
+  // browsers. It adds spaces and sorts the properties in some
+  // non-alphabetical order. Handling that would require sorting CSS
+  // properties in the client & server versions or applying
+  // `expectedStyle` to a temporary DOM node to read its `style` attribute
+  // normalized. Since it only affects IE, we're skipping style warnings
+  // in that browser completely in favor of doing all that work.
+  // See https://github.com/facebook/react/issues/11807
+
+
+  canDiffStyleForHydrationWarning = canUseDOM && !document.documentMode; // HTML parsing normalizes CR and CRLF to LF.
+  // It also can turn \u0000 into \uFFFD inside attributes.
+  // https://www.w3.org/TR/html5/single-page.html#preprocessing-the-input-stream
+  // If we have a mismatch, it might be caused by that.
+  // We will still patch up in this case but not fire the warning.
+
+  var NORMALIZE_NEWLINES_REGEX = /\r\n?/g;
+  var NORMALIZE_NULL_AND_REPLACEMENT_REGEX = /\u0000|\uFFFD/g;
+
+  normalizeMarkupForTextOrAttribute = function (markup) {
+    var markupString = typeof markup === 'string' ? markup : '' + markup;
+    return markupString.replace(NORMALIZE_NEWLINES_REGEX, '\n').replace(NORMALIZE_NULL_AND_REPLACEMENT_REGEX, '');
+  };
+
+  warnForTextDifference = function (serverText, clientText) {
+    if (didWarnInvalidHydration) {
+      return;
+    }
+
+    var normalizedClientText = normalizeMarkupForTextOrAttribute(clientText);
+    var normalizedServerText = normalizeMarkupForTextOrAttribute(serverText);
+
+    if (normalizedServerText === normalizedClientText) {
+      return;
+    }
+
+    didWarnInvalidHydration = true;
+
+    error('Text content did not match. Server: "%s" Client: "%s"', normalizedServerText, normalizedClientText);
+  };
+
+  warnForPropDifference = function (propName, serverValue, clientValue) {
+    if (didWarnInvalidHydration) {
+      return;
+    }
+
+    var normalizedClientValue = normalizeMarkupForTextOrAttribute(clientValue);
+    var normalizedServerValue = normalizeMarkupForTextOrAttribute(serverValue);
+
+    if (normalizedServerValue === normalizedClientValue) {
+      return;
+    }
+
+    didWarnInvalidHydration = true;
+
+    error('Prop `%s` did not match. Server: %s Client: %s', propName, JSON.stringify(normalizedServerValue), JSON.stringify(normalizedClientValue));
+  };
+
+  warnForExtraAttributes = function (attributeNames) {
+    if (didWarnInvalidHydration) {
+      return;
+    }
+
+    didWarnInvalidHydration = true;
+    var names = [];
+    attributeNames.forEach(function (name) {
+      names.push(name);
+    });
+
+    error('Extra attributes from the server: %s', names);
+  };
+
+  warnForInvalidEventListener = function (registrationName, listener) {
+    if (listener === false) {
+      error('Expected `%s` listener to be a function, instead got `false`.\n\n' + 'If you used to conditionally omit it with %s={condition && value}, ' + 'pass %s={condition ? value : undefined} instead.', registrationName, registrationName, registrationName);
+    } else {
+      error('Expected `%s` listener to be a function, instead got a value of `%s` type.', registrationName, typeof listener);
+    }
+  }; // Parse the HTML and read it back to normalize the HTML string so that it
+  // can be used for comparison.
+
+
+  normalizeHTML = function (parent, html) {
+    // We could have created a separate document here to avoid
+    // re-initializing custom elements if they exist. But this breaks
+    // how <noscript> is being handled. So we use the same document.
+    // See the discussion in https://github.com/facebook/react/pull/11157.
+    var testElement = parent.namespaceURI === HTML_NAMESPACE$1 ? parent.ownerDocument.createElement(parent.tagName) : parent.ownerDocument.createElementNS(parent.namespaceURI, parent.tagName);
+    testElement.innerHTML = html;
+    return testEl
