@@ -52298,4 +52298,263 @@ var normalizeHTML;
     // See the discussion in https://github.com/facebook/react/pull/11157.
     var testElement = parent.namespaceURI === HTML_NAMESPACE$1 ? parent.ownerDocument.createElement(parent.tagName) : parent.ownerDocument.createElementNS(parent.namespaceURI, parent.tagName);
     testElement.innerHTML = html;
-    return testEl
+    return testElement.innerHTML;
+  };
+}
+
+function ensureListeningTo(rootContainerElement, registrationName) {
+  var isDocumentOrFragment = rootContainerElement.nodeType === DOCUMENT_NODE || rootContainerElement.nodeType === DOCUMENT_FRAGMENT_NODE;
+  var doc = isDocumentOrFragment ? rootContainerElement : rootContainerElement.ownerDocument;
+  legacyListenToEvent(registrationName, doc);
+}
+
+function getOwnerDocumentFromRootContainer(rootContainerElement) {
+  return rootContainerElement.nodeType === DOCUMENT_NODE ? rootContainerElement : rootContainerElement.ownerDocument;
+}
+
+function noop() {}
+
+function trapClickOnNonInteractiveElement(node) {
+  // Mobile Safari does not fire properly bubble click events on
+  // non-interactive elements, which means delegated click listeners do not
+  // fire. The workaround for this bug involves attaching an empty click
+  // listener on the target node.
+  // http://www.quirksmode.org/blog/archives/2010/09/click_event_del.html
+  // Just set it using the onclick property so that we don't have to manage any
+  // bookkeeping for it. Not sure if we need to clear it when the listener is
+  // removed.
+  // TODO: Only do this for the relevant Safaris maybe?
+  node.onclick = noop;
+}
+
+function setInitialDOMProperties(tag, domElement, rootContainerElement, nextProps, isCustomComponentTag) {
+  for (var propKey in nextProps) {
+    if (!nextProps.hasOwnProperty(propKey)) {
+      continue;
+    }
+
+    var nextProp = nextProps[propKey];
+
+    if (propKey === STYLE) {
+      {
+        if (nextProp) {
+          // Freeze the next style object so that we can assume it won't be
+          // mutated. We have already warned for this in the past.
+          Object.freeze(nextProp);
+        }
+      } // Relies on `updateStylesByID` not mutating `styleUpdates`.
+
+
+      setValueForStyles(domElement, nextProp);
+    } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
+      var nextHtml = nextProp ? nextProp[HTML$1] : undefined;
+
+      if (nextHtml != null) {
+        setInnerHTML(domElement, nextHtml);
+      }
+    } else if (propKey === CHILDREN) {
+      if (typeof nextProp === 'string') {
+        // Avoid setting initial textContent when the text is empty. In IE11 setting
+        // textContent on a <textarea> will cause the placeholder to not
+        // show within the <textarea> until it has been focused and blurred again.
+        // https://github.com/facebook/react/issues/6731#issuecomment-254874553
+        var canSetTextContent = tag !== 'textarea' || nextProp !== '';
+
+        if (canSetTextContent) {
+          setTextContent(domElement, nextProp);
+        }
+      } else if (typeof nextProp === 'number') {
+        setTextContent(domElement, '' + nextProp);
+      }
+    } else if ( propKey === SUPPRESS_CONTENT_EDITABLE_WARNING || propKey === SUPPRESS_HYDRATION_WARNING) ; else if (propKey === AUTOFOCUS) ; else if (registrationNameModules.hasOwnProperty(propKey)) {
+      if (nextProp != null) {
+        if ( typeof nextProp !== 'function') {
+          warnForInvalidEventListener(propKey, nextProp);
+        }
+
+        ensureListeningTo(rootContainerElement, propKey);
+      }
+    } else if (nextProp != null) {
+      setValueForProperty(domElement, propKey, nextProp, isCustomComponentTag);
+    }
+  }
+}
+
+function updateDOMProperties(domElement, updatePayload, wasCustomComponentTag, isCustomComponentTag) {
+  // TODO: Handle wasCustomComponentTag
+  for (var i = 0; i < updatePayload.length; i += 2) {
+    var propKey = updatePayload[i];
+    var propValue = updatePayload[i + 1];
+
+    if (propKey === STYLE) {
+      setValueForStyles(domElement, propValue);
+    } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
+      setInnerHTML(domElement, propValue);
+    } else if (propKey === CHILDREN) {
+      setTextContent(domElement, propValue);
+    } else {
+      setValueForProperty(domElement, propKey, propValue, isCustomComponentTag);
+    }
+  }
+}
+
+function createElement(type, props, rootContainerElement, parentNamespace) {
+  var isCustomComponentTag; // We create tags in the namespace of their parent container, except HTML
+  // tags get no namespace.
+
+  var ownerDocument = getOwnerDocumentFromRootContainer(rootContainerElement);
+  var domElement;
+  var namespaceURI = parentNamespace;
+
+  if (namespaceURI === HTML_NAMESPACE$1) {
+    namespaceURI = getIntrinsicNamespace(type);
+  }
+
+  if (namespaceURI === HTML_NAMESPACE$1) {
+    {
+      isCustomComponentTag = isCustomComponent(type, props); // Should this check be gated by parent namespace? Not sure we want to
+      // allow <SVG> or <mATH>.
+
+      if (!isCustomComponentTag && type !== type.toLowerCase()) {
+        error('<%s /> is using incorrect casing. ' + 'Use PascalCase for React components, ' + 'or lowercase for HTML elements.', type);
+      }
+    }
+
+    if (type === 'script') {
+      // Create the script via .innerHTML so its "parser-inserted" flag is
+      // set to true and it does not execute
+      var div = ownerDocument.createElement('div');
+
+      div.innerHTML = '<script><' + '/script>'; // eslint-disable-line
+      // This is guaranteed to yield a script element.
+
+      var firstChild = div.firstChild;
+      domElement = div.removeChild(firstChild);
+    } else if (typeof props.is === 'string') {
+      // $FlowIssue `createElement` should be updated for Web Components
+      domElement = ownerDocument.createElement(type, {
+        is: props.is
+      });
+    } else {
+      // Separate else branch instead of using `props.is || undefined` above because of a Firefox bug.
+      // See discussion in https://github.com/facebook/react/pull/6896
+      // and discussion in https://bugzilla.mozilla.org/show_bug.cgi?id=1276240
+      domElement = ownerDocument.createElement(type); // Normally attributes are assigned in `setInitialDOMProperties`, however the `multiple` and `size`
+      // attributes on `select`s needs to be added before `option`s are inserted.
+      // This prevents:
+      // - a bug where the `select` does not scroll to the correct option because singular
+      //  `select` elements automatically pick the first item #13222
+      // - a bug where the `select` set the first item as selected despite the `size` attribute #14239
+      // See https://github.com/facebook/react/issues/13222
+      // and https://github.com/facebook/react/issues/14239
+
+      if (type === 'select') {
+        var node = domElement;
+
+        if (props.multiple) {
+          node.multiple = true;
+        } else if (props.size) {
+          // Setting a size greater than 1 causes a select to behave like `multiple=true`, where
+          // it is possible that no option is selected.
+          //
+          // This is only necessary when a select in "single selection mode".
+          node.size = props.size;
+        }
+      }
+    }
+  } else {
+    domElement = ownerDocument.createElementNS(namespaceURI, type);
+  }
+
+  {
+    if (namespaceURI === HTML_NAMESPACE$1) {
+      if (!isCustomComponentTag && Object.prototype.toString.call(domElement) === '[object HTMLUnknownElement]' && !Object.prototype.hasOwnProperty.call(warnedUnknownTags, type)) {
+        warnedUnknownTags[type] = true;
+
+        error('The tag <%s> is unrecognized in this browser. ' + 'If you meant to render a React component, start its name with ' + 'an uppercase letter.', type);
+      }
+    }
+  }
+
+  return domElement;
+}
+function createTextNode(text, rootContainerElement) {
+  return getOwnerDocumentFromRootContainer(rootContainerElement).createTextNode(text);
+}
+function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
+  var isCustomComponentTag = isCustomComponent(tag, rawProps);
+
+  {
+    validatePropertiesInDevelopment(tag, rawProps);
+  } // TODO: Make sure that we check isMounted before firing any of these events.
+
+
+  var props;
+
+  switch (tag) {
+    case 'iframe':
+    case 'object':
+    case 'embed':
+      trapBubbledEvent(TOP_LOAD, domElement);
+      props = rawProps;
+      break;
+
+    case 'video':
+    case 'audio':
+      // Create listener for each media event
+      for (var i = 0; i < mediaEventTypes.length; i++) {
+        trapBubbledEvent(mediaEventTypes[i], domElement);
+      }
+
+      props = rawProps;
+      break;
+
+    case 'source':
+      trapBubbledEvent(TOP_ERROR, domElement);
+      props = rawProps;
+      break;
+
+    case 'img':
+    case 'image':
+    case 'link':
+      trapBubbledEvent(TOP_ERROR, domElement);
+      trapBubbledEvent(TOP_LOAD, domElement);
+      props = rawProps;
+      break;
+
+    case 'form':
+      trapBubbledEvent(TOP_RESET, domElement);
+      trapBubbledEvent(TOP_SUBMIT, domElement);
+      props = rawProps;
+      break;
+
+    case 'details':
+      trapBubbledEvent(TOP_TOGGLE, domElement);
+      props = rawProps;
+      break;
+
+    case 'input':
+      initWrapperState(domElement, rawProps);
+      props = getHostProps(domElement, rawProps);
+      trapBubbledEvent(TOP_INVALID, domElement); // For controlled components we always need to ensure we're listening
+      // to onChange. Even if there is no listener.
+
+      ensureListeningTo(rootContainerElement, 'onChange');
+      break;
+
+    case 'option':
+      validateProps(domElement, rawProps);
+      props = getHostProps$1(domElement, rawProps);
+      break;
+
+    case 'select':
+      initWrapperState$1(domElement, rawProps);
+      props = getHostProps$2(domElement, rawProps);
+      trapBubbledEvent(TOP_INVALID, domElement); // For controlled components we always need to ensure we're listening
+      // to onChange. Even if there is no listener.
+
+      ensureListeningTo(rootContainerElement, 'onChange');
+      break;
+
+    case 'textarea':
+      initWrapperState
