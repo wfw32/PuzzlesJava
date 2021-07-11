@@ -53125,4 +53125,352 @@ function warnForDeletedHydratableElement(parentNode, child) {
 
     didWarnInvalidHydration = true;
 
-    error('Did not expect server HTML to contain a <%s> in <%s>.', child.nodeName.t
+    error('Did not expect server HTML to contain a <%s> in <%s>.', child.nodeName.toLowerCase(), parentNode.nodeName.toLowerCase());
+  }
+}
+function warnForDeletedHydratableText(parentNode, child) {
+  {
+    if (didWarnInvalidHydration) {
+      return;
+    }
+
+    didWarnInvalidHydration = true;
+
+    error('Did not expect server HTML to contain the text node "%s" in <%s>.', child.nodeValue, parentNode.nodeName.toLowerCase());
+  }
+}
+function warnForInsertedHydratedElement(parentNode, tag, props) {
+  {
+    if (didWarnInvalidHydration) {
+      return;
+    }
+
+    didWarnInvalidHydration = true;
+
+    error('Expected server HTML to contain a matching <%s> in <%s>.', tag, parentNode.nodeName.toLowerCase());
+  }
+}
+function warnForInsertedHydratedText(parentNode, text) {
+  {
+    if (text === '') {
+      // We expect to insert empty text nodes since they're not represented in
+      // the HTML.
+      // TODO: Remove this special case if we can just avoid inserting empty
+      // text nodes.
+      return;
+    }
+
+    if (didWarnInvalidHydration) {
+      return;
+    }
+
+    didWarnInvalidHydration = true;
+
+    error('Expected server HTML to contain a matching text node for "%s" in <%s>.', text, parentNode.nodeName.toLowerCase());
+  }
+}
+function restoreControlledState$3(domElement, tag, props) {
+  switch (tag) {
+    case 'input':
+      restoreControlledState(domElement, props);
+      return;
+
+    case 'textarea':
+      restoreControlledState$2(domElement, props);
+      return;
+
+    case 'select':
+      restoreControlledState$1(domElement, props);
+      return;
+  }
+}
+
+function getActiveElement(doc) {
+  doc = doc || (typeof document !== 'undefined' ? document : undefined);
+
+  if (typeof doc === 'undefined') {
+    return null;
+  }
+
+  try {
+    return doc.activeElement || doc.body;
+  } catch (e) {
+    return doc.body;
+  }
+}
+
+/**
+ * Given any node return the first leaf node without children.
+ *
+ * @param {DOMElement|DOMTextNode} node
+ * @return {DOMElement|DOMTextNode}
+ */
+
+function getLeafNode(node) {
+  while (node && node.firstChild) {
+    node = node.firstChild;
+  }
+
+  return node;
+}
+/**
+ * Get the next sibling within a container. This will walk up the
+ * DOM if a node's siblings have been exhausted.
+ *
+ * @param {DOMElement|DOMTextNode} node
+ * @return {?DOMElement|DOMTextNode}
+ */
+
+
+function getSiblingNode(node) {
+  while (node) {
+    if (node.nextSibling) {
+      return node.nextSibling;
+    }
+
+    node = node.parentNode;
+  }
+}
+/**
+ * Get object describing the nodes which contain characters at offset.
+ *
+ * @param {DOMElement|DOMTextNode} root
+ * @param {number} offset
+ * @return {?object}
+ */
+
+
+function getNodeForCharacterOffset(root, offset) {
+  var node = getLeafNode(root);
+  var nodeStart = 0;
+  var nodeEnd = 0;
+
+  while (node) {
+    if (node.nodeType === TEXT_NODE) {
+      nodeEnd = nodeStart + node.textContent.length;
+
+      if (nodeStart <= offset && nodeEnd >= offset) {
+        return {
+          node: node,
+          offset: offset - nodeStart
+        };
+      }
+
+      nodeStart = nodeEnd;
+    }
+
+    node = getLeafNode(getSiblingNode(node));
+  }
+}
+
+/**
+ * @param {DOMElement} outerNode
+ * @return {?object}
+ */
+
+function getOffsets(outerNode) {
+  var ownerDocument = outerNode.ownerDocument;
+  var win = ownerDocument && ownerDocument.defaultView || window;
+  var selection = win.getSelection && win.getSelection();
+
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+
+  var anchorNode = selection.anchorNode,
+      anchorOffset = selection.anchorOffset,
+      focusNode = selection.focusNode,
+      focusOffset = selection.focusOffset; // In Firefox, anchorNode and focusNode can be "anonymous divs", e.g. the
+  // up/down buttons on an <input type="number">. Anonymous divs do not seem to
+  // expose properties, triggering a "Permission denied error" if any of its
+  // properties are accessed. The only seemingly possible way to avoid erroring
+  // is to access a property that typically works for non-anonymous divs and
+  // catch any error that may otherwise arise. See
+  // https://bugzilla.mozilla.org/show_bug.cgi?id=208427
+
+  try {
+    /* eslint-disable no-unused-expressions */
+    anchorNode.nodeType;
+    focusNode.nodeType;
+    /* eslint-enable no-unused-expressions */
+  } catch (e) {
+    return null;
+  }
+
+  return getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNode, focusOffset);
+}
+/**
+ * Returns {start, end} where `start` is the character/codepoint index of
+ * (anchorNode, anchorOffset) within the textContent of `outerNode`, and
+ * `end` is the index of (focusNode, focusOffset).
+ *
+ * Returns null if you pass in garbage input but we should probably just crash.
+ *
+ * Exported only for testing.
+ */
+
+function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNode, focusOffset) {
+  var length = 0;
+  var start = -1;
+  var end = -1;
+  var indexWithinAnchor = 0;
+  var indexWithinFocus = 0;
+  var node = outerNode;
+  var parentNode = null;
+
+  outer: while (true) {
+    var next = null;
+
+    while (true) {
+      if (node === anchorNode && (anchorOffset === 0 || node.nodeType === TEXT_NODE)) {
+        start = length + anchorOffset;
+      }
+
+      if (node === focusNode && (focusOffset === 0 || node.nodeType === TEXT_NODE)) {
+        end = length + focusOffset;
+      }
+
+      if (node.nodeType === TEXT_NODE) {
+        length += node.nodeValue.length;
+      }
+
+      if ((next = node.firstChild) === null) {
+        break;
+      } // Moving from `node` to its first child `next`.
+
+
+      parentNode = node;
+      node = next;
+    }
+
+    while (true) {
+      if (node === outerNode) {
+        // If `outerNode` has children, this is always the second time visiting
+        // it. If it has no children, this is still the first loop, and the only
+        // valid selection is anchorNode and focusNode both equal to this node
+        // and both offsets 0, in which case we will have handled above.
+        break outer;
+      }
+
+      if (parentNode === anchorNode && ++indexWithinAnchor === anchorOffset) {
+        start = length;
+      }
+
+      if (parentNode === focusNode && ++indexWithinFocus === focusOffset) {
+        end = length;
+      }
+
+      if ((next = node.nextSibling) !== null) {
+        break;
+      }
+
+      node = parentNode;
+      parentNode = node.parentNode;
+    } // Moving from `node` to its next sibling `next`.
+
+
+    node = next;
+  }
+
+  if (start === -1 || end === -1) {
+    // This should never happen. (Would happen if the anchor/focus nodes aren't
+    // actually inside the passed-in node.)
+    return null;
+  }
+
+  return {
+    start: start,
+    end: end
+  };
+}
+/**
+ * In modern non-IE browsers, we can support both forward and backward
+ * selections.
+ *
+ * Note: IE10+ supports the Selection object, but it does not support
+ * the `extend` method, which means that even in modern IE, it's not possible
+ * to programmatically create a backward selection. Thus, for all IE
+ * versions, we use the old IE API to create our selections.
+ *
+ * @param {DOMElement|DOMTextNode} node
+ * @param {object} offsets
+ */
+
+function setOffsets(node, offsets) {
+  var doc = node.ownerDocument || document;
+  var win = doc && doc.defaultView || window; // Edge fails with "Object expected" in some scenarios.
+  // (For instance: TinyMCE editor used in a list component that supports pasting to add more,
+  // fails when pasting 100+ items)
+
+  if (!win.getSelection) {
+    return;
+  }
+
+  var selection = win.getSelection();
+  var length = node.textContent.length;
+  var start = Math.min(offsets.start, length);
+  var end = offsets.end === undefined ? start : Math.min(offsets.end, length); // IE 11 uses modern selection, but doesn't support the extend method.
+  // Flip backward selections, so we can set with a single range.
+
+  if (!selection.extend && start > end) {
+    var temp = end;
+    end = start;
+    start = temp;
+  }
+
+  var startMarker = getNodeForCharacterOffset(node, start);
+  var endMarker = getNodeForCharacterOffset(node, end);
+
+  if (startMarker && endMarker) {
+    if (selection.rangeCount === 1 && selection.anchorNode === startMarker.node && selection.anchorOffset === startMarker.offset && selection.focusNode === endMarker.node && selection.focusOffset === endMarker.offset) {
+      return;
+    }
+
+    var range = doc.createRange();
+    range.setStart(startMarker.node, startMarker.offset);
+    selection.removeAllRanges();
+
+    if (start > end) {
+      selection.addRange(range);
+      selection.extend(endMarker.node, endMarker.offset);
+    } else {
+      range.setEnd(endMarker.node, endMarker.offset);
+      selection.addRange(range);
+    }
+  }
+}
+
+function isTextNode(node) {
+  return node && node.nodeType === TEXT_NODE;
+}
+
+function containsNode(outerNode, innerNode) {
+  if (!outerNode || !innerNode) {
+    return false;
+  } else if (outerNode === innerNode) {
+    return true;
+  } else if (isTextNode(outerNode)) {
+    return false;
+  } else if (isTextNode(innerNode)) {
+    return containsNode(outerNode, innerNode.parentNode);
+  } else if ('contains' in outerNode) {
+    return outerNode.contains(innerNode);
+  } else if (outerNode.compareDocumentPosition) {
+    return !!(outerNode.compareDocumentPosition(innerNode) & 16);
+  } else {
+    return false;
+  }
+}
+
+function isInDocument(node) {
+  return node && node.ownerDocument && containsNode(node.ownerDocument.documentElement, node);
+}
+
+function isSameOriginFrame(iframe) {
+  try {
+    // Accessing the contentDocument of a HTMLIframeElement can cause the browser
+    // to throw, e.g. if it has a cross-origin src attribute.
+    // Safari will show an error in the console when the access results in "Blocked a frame with origin". e.g:
+    // iframe.contentDocument.defaultView;
+    // A safety way is to access one of the cross origin properties: Window or Location
+   
