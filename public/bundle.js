@@ -53473,4 +53473,277 @@ function isSameOriginFrame(iframe) {
     // Safari will show an error in the console when the access results in "Blocked a frame with origin". e.g:
     // iframe.contentDocument.defaultView;
     // A safety way is to access one of the cross origin properties: Window or Location
-   
+    // Which might result in "SecurityError" DOM Exception and it is compatible to Safari.
+    // https://html.spec.whatwg.org/multipage/browsers.html#integration-with-idl
+    return typeof iframe.contentWindow.location.href === 'string';
+  } catch (err) {
+    return false;
+  }
+}
+
+function getActiveElementDeep() {
+  var win = window;
+  var element = getActiveElement();
+
+  while (element instanceof win.HTMLIFrameElement) {
+    if (isSameOriginFrame(element)) {
+      win = element.contentWindow;
+    } else {
+      return element;
+    }
+
+    element = getActiveElement(win.document);
+  }
+
+  return element;
+}
+/**
+ * @ReactInputSelection: React input selection module. Based on Selection.js,
+ * but modified to be suitable for react and has a couple of bug fixes (doesn't
+ * assume buttons have range selections allowed).
+ * Input selection module for React.
+ */
+
+/**
+ * @hasSelectionCapabilities: we get the element types that support selection
+ * from https://html.spec.whatwg.org/#do-not-apply, looking at `selectionStart`
+ * and `selectionEnd` rows.
+ */
+
+
+function hasSelectionCapabilities(elem) {
+  var nodeName = elem && elem.nodeName && elem.nodeName.toLowerCase();
+  return nodeName && (nodeName === 'input' && (elem.type === 'text' || elem.type === 'search' || elem.type === 'tel' || elem.type === 'url' || elem.type === 'password') || nodeName === 'textarea' || elem.contentEditable === 'true');
+}
+function getSelectionInformation() {
+  var focusedElem = getActiveElementDeep();
+  return {
+    // Used by Flare
+    activeElementDetached: null,
+    focusedElem: focusedElem,
+    selectionRange: hasSelectionCapabilities(focusedElem) ? getSelection(focusedElem) : null
+  };
+}
+/**
+ * @restoreSelection: If any selection information was potentially lost,
+ * restore it. This is useful when performing operations that could remove dom
+ * nodes and place them back in, resulting in focus being lost.
+ */
+
+function restoreSelection(priorSelectionInformation) {
+  var curFocusedElem = getActiveElementDeep();
+  var priorFocusedElem = priorSelectionInformation.focusedElem;
+  var priorSelectionRange = priorSelectionInformation.selectionRange;
+
+  if (curFocusedElem !== priorFocusedElem && isInDocument(priorFocusedElem)) {
+    if (priorSelectionRange !== null && hasSelectionCapabilities(priorFocusedElem)) {
+      setSelection(priorFocusedElem, priorSelectionRange);
+    } // Focusing a node can change the scroll position, which is undesirable
+
+
+    var ancestors = [];
+    var ancestor = priorFocusedElem;
+
+    while (ancestor = ancestor.parentNode) {
+      if (ancestor.nodeType === ELEMENT_NODE) {
+        ancestors.push({
+          element: ancestor,
+          left: ancestor.scrollLeft,
+          top: ancestor.scrollTop
+        });
+      }
+    }
+
+    if (typeof priorFocusedElem.focus === 'function') {
+      priorFocusedElem.focus();
+    }
+
+    for (var i = 0; i < ancestors.length; i++) {
+      var info = ancestors[i];
+      info.element.scrollLeft = info.left;
+      info.element.scrollTop = info.top;
+    }
+  }
+}
+/**
+ * @getSelection: Gets the selection bounds of a focused textarea, input or
+ * contentEditable node.
+ * -@input: Look up selection bounds of this input
+ * -@return {start: selectionStart, end: selectionEnd}
+ */
+
+function getSelection(input) {
+  var selection;
+
+  if ('selectionStart' in input) {
+    // Modern browser with input or textarea.
+    selection = {
+      start: input.selectionStart,
+      end: input.selectionEnd
+    };
+  } else {
+    // Content editable or old IE textarea.
+    selection = getOffsets(input);
+  }
+
+  return selection || {
+    start: 0,
+    end: 0
+  };
+}
+/**
+ * @setSelection: Sets the selection bounds of a textarea or input and focuses
+ * the input.
+ * -@input     Set selection bounds of this input or textarea
+ * -@offsets   Object of same form that is returned from get*
+ */
+
+function setSelection(input, offsets) {
+  var start = offsets.start,
+      end = offsets.end;
+
+  if (end === undefined) {
+    end = start;
+  }
+
+  if ('selectionStart' in input) {
+    input.selectionStart = start;
+    input.selectionEnd = Math.min(end, input.value.length);
+  } else {
+    setOffsets(input, offsets);
+  }
+}
+
+var validateDOMNesting = function () {};
+
+var updatedAncestorInfo = function () {};
+
+{
+  // This validation code was written based on the HTML5 parsing spec:
+  // https://html.spec.whatwg.org/multipage/syntax.html#has-an-element-in-scope
+  //
+  // Note: this does not catch all invalid nesting, nor does it try to (as it's
+  // not clear what practical benefit doing so provides); instead, we warn only
+  // for cases where the parser will give a parse tree differing from what React
+  // intended. For example, <b><div></div></b> is invalid but we don't warn
+  // because it still parses correctly; we do warn for other cases like nested
+  // <p> tags where the beginning of the second element implicitly closes the
+  // first, causing a confusing mess.
+  // https://html.spec.whatwg.org/multipage/syntax.html#special
+  var specialTags = ['address', 'applet', 'area', 'article', 'aside', 'base', 'basefont', 'bgsound', 'blockquote', 'body', 'br', 'button', 'caption', 'center', 'col', 'colgroup', 'dd', 'details', 'dir', 'div', 'dl', 'dt', 'embed', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'frame', 'frameset', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'iframe', 'img', 'input', 'isindex', 'li', 'link', 'listing', 'main', 'marquee', 'menu', 'menuitem', 'meta', 'nav', 'noembed', 'noframes', 'noscript', 'object', 'ol', 'p', 'param', 'plaintext', 'pre', 'script', 'section', 'select', 'source', 'style', 'summary', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'ul', 'wbr', 'xmp']; // https://html.spec.whatwg.org/multipage/syntax.html#has-an-element-in-scope
+
+  var inScopeTags = ['applet', 'caption', 'html', 'table', 'td', 'th', 'marquee', 'object', 'template', // https://html.spec.whatwg.org/multipage/syntax.html#html-integration-point
+  // TODO: Distinguish by namespace here -- for <title>, including it here
+  // errs on the side of fewer warnings
+  'foreignObject', 'desc', 'title']; // https://html.spec.whatwg.org/multipage/syntax.html#has-an-element-in-button-scope
+
+  var buttonScopeTags = inScopeTags.concat(['button']); // https://html.spec.whatwg.org/multipage/syntax.html#generate-implied-end-tags
+
+  var impliedEndTags = ['dd', 'dt', 'li', 'option', 'optgroup', 'p', 'rp', 'rt'];
+  var emptyAncestorInfo = {
+    current: null,
+    formTag: null,
+    aTagInScope: null,
+    buttonTagInScope: null,
+    nobrTagInScope: null,
+    pTagInButtonScope: null,
+    listItemTagAutoclosing: null,
+    dlItemTagAutoclosing: null
+  };
+
+  updatedAncestorInfo = function (oldInfo, tag) {
+    var ancestorInfo = _assign({}, oldInfo || emptyAncestorInfo);
+
+    var info = {
+      tag: tag
+    };
+
+    if (inScopeTags.indexOf(tag) !== -1) {
+      ancestorInfo.aTagInScope = null;
+      ancestorInfo.buttonTagInScope = null;
+      ancestorInfo.nobrTagInScope = null;
+    }
+
+    if (buttonScopeTags.indexOf(tag) !== -1) {
+      ancestorInfo.pTagInButtonScope = null;
+    } // See rules for 'li', 'dd', 'dt' start tags in
+    // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-inbody
+
+
+    if (specialTags.indexOf(tag) !== -1 && tag !== 'address' && tag !== 'div' && tag !== 'p') {
+      ancestorInfo.listItemTagAutoclosing = null;
+      ancestorInfo.dlItemTagAutoclosing = null;
+    }
+
+    ancestorInfo.current = info;
+
+    if (tag === 'form') {
+      ancestorInfo.formTag = info;
+    }
+
+    if (tag === 'a') {
+      ancestorInfo.aTagInScope = info;
+    }
+
+    if (tag === 'button') {
+      ancestorInfo.buttonTagInScope = info;
+    }
+
+    if (tag === 'nobr') {
+      ancestorInfo.nobrTagInScope = info;
+    }
+
+    if (tag === 'p') {
+      ancestorInfo.pTagInButtonScope = info;
+    }
+
+    if (tag === 'li') {
+      ancestorInfo.listItemTagAutoclosing = info;
+    }
+
+    if (tag === 'dd' || tag === 'dt') {
+      ancestorInfo.dlItemTagAutoclosing = info;
+    }
+
+    return ancestorInfo;
+  };
+  /**
+   * Returns whether
+   */
+
+
+  var isTagValidWithParent = function (tag, parentTag) {
+    // First, let's check if we're in an unusual parsing mode...
+    switch (parentTag) {
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-inselect
+      case 'select':
+        return tag === 'option' || tag === 'optgroup' || tag === '#text';
+
+      case 'optgroup':
+        return tag === 'option' || tag === '#text';
+      // Strictly speaking, seeing an <option> doesn't mean we're in a <select>
+      // but
+
+      case 'option':
+        return tag === '#text';
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intd
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-incaption
+      // No special behavior since these rules fall back to "in body" mode for
+      // all except special table nodes which cause bad parsing behavior anyway.
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intr
+
+      case 'tr':
+        return tag === 'th' || tag === 'td' || tag === 'style' || tag === 'script' || tag === 'template';
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intbody
+
+      case 'tbody':
+      case 'thead':
+      case 'tfoot':
+        return tag === 'tr' || tag === 'style' || tag === 'script' || tag === 'template';
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-incolgroup
+
+      case 'colgroup':
+        return tag === 'col' || tag === 'template';
+      // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intable
+
+     
