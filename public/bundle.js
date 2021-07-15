@@ -54340,4 +54340,313 @@ function didNotFindHydratableContainerInstance(parentContainer, type, props) {
     warnForInsertedHydratedElement(parentContainer, type);
   }
 }
-function didNotFindHydratableContainerTextInstance(parentContainer, 
+function didNotFindHydratableContainerTextInstance(parentContainer, text) {
+  {
+    warnForInsertedHydratedText(parentContainer, text);
+  }
+}
+function didNotFindHydratableInstance(parentType, parentProps, parentInstance, type, props) {
+  if ( parentProps[SUPPRESS_HYDRATION_WARNING$1] !== true) {
+    warnForInsertedHydratedElement(parentInstance, type);
+  }
+}
+function didNotFindHydratableTextInstance(parentType, parentProps, parentInstance, text) {
+  if ( parentProps[SUPPRESS_HYDRATION_WARNING$1] !== true) {
+    warnForInsertedHydratedText(parentInstance, text);
+  }
+}
+function didNotFindHydratableSuspenseInstance(parentType, parentProps, parentInstance) {
+  if ( parentProps[SUPPRESS_HYDRATION_WARNING$1] !== true) ;
+}
+
+var randomKey = Math.random().toString(36).slice(2);
+var internalInstanceKey = '__reactInternalInstance$' + randomKey;
+var internalEventHandlersKey = '__reactEventHandlers$' + randomKey;
+var internalContainerInstanceKey = '__reactContainere$' + randomKey;
+function precacheFiberNode(hostInst, node) {
+  node[internalInstanceKey] = hostInst;
+}
+function markContainerAsRoot(hostRoot, node) {
+  node[internalContainerInstanceKey] = hostRoot;
+}
+function unmarkContainerAsRoot(node) {
+  node[internalContainerInstanceKey] = null;
+}
+function isContainerMarkedAsRoot(node) {
+  return !!node[internalContainerInstanceKey];
+} // Given a DOM node, return the closest HostComponent or HostText fiber ancestor.
+// If the target node is part of a hydrated or not yet rendered subtree, then
+// this may also return a SuspenseComponent or HostRoot to indicate that.
+// Conceptually the HostRoot fiber is a child of the Container node. So if you
+// pass the Container node as the targetNode, you will not actually get the
+// HostRoot back. To get to the HostRoot, you need to pass a child of it.
+// The same thing applies to Suspense boundaries.
+
+function getClosestInstanceFromNode(targetNode) {
+  var targetInst = targetNode[internalInstanceKey];
+
+  if (targetInst) {
+    // Don't return HostRoot or SuspenseComponent here.
+    return targetInst;
+  } // If the direct event target isn't a React owned DOM node, we need to look
+  // to see if one of its parents is a React owned DOM node.
+
+
+  var parentNode = targetNode.parentNode;
+
+  while (parentNode) {
+    // We'll check if this is a container root that could include
+    // React nodes in the future. We need to check this first because
+    // if we're a child of a dehydrated container, we need to first
+    // find that inner container before moving on to finding the parent
+    // instance. Note that we don't check this field on  the targetNode
+    // itself because the fibers are conceptually between the container
+    // node and the first child. It isn't surrounding the container node.
+    // If it's not a container, we check if it's an instance.
+    targetInst = parentNode[internalContainerInstanceKey] || parentNode[internalInstanceKey];
+
+    if (targetInst) {
+      // Since this wasn't the direct target of the event, we might have
+      // stepped past dehydrated DOM nodes to get here. However they could
+      // also have been non-React nodes. We need to answer which one.
+      // If we the instance doesn't have any children, then there can't be
+      // a nested suspense boundary within it. So we can use this as a fast
+      // bailout. Most of the time, when people add non-React children to
+      // the tree, it is using a ref to a child-less DOM node.
+      // Normally we'd only need to check one of the fibers because if it
+      // has ever gone from having children to deleting them or vice versa
+      // it would have deleted the dehydrated boundary nested inside already.
+      // However, since the HostRoot starts out with an alternate it might
+      // have one on the alternate so we need to check in case this was a
+      // root.
+      var alternate = targetInst.alternate;
+
+      if (targetInst.child !== null || alternate !== null && alternate.child !== null) {
+        // Next we need to figure out if the node that skipped past is
+        // nested within a dehydrated boundary and if so, which one.
+        var suspenseInstance = getParentSuspenseInstance(targetNode);
+
+        while (suspenseInstance !== null) {
+          // We found a suspense instance. That means that we haven't
+          // hydrated it yet. Even though we leave the comments in the
+          // DOM after hydrating, and there are boundaries in the DOM
+          // that could already be hydrated, we wouldn't have found them
+          // through this pass since if the target is hydrated it would
+          // have had an internalInstanceKey on it.
+          // Let's get the fiber associated with the SuspenseComponent
+          // as the deepest instance.
+          var targetSuspenseInst = suspenseInstance[internalInstanceKey];
+
+          if (targetSuspenseInst) {
+            return targetSuspenseInst;
+          } // If we don't find a Fiber on the comment, it might be because
+          // we haven't gotten to hydrate it yet. There might still be a
+          // parent boundary that hasn't above this one so we need to find
+          // the outer most that is known.
+
+
+          suspenseInstance = getParentSuspenseInstance(suspenseInstance); // If we don't find one, then that should mean that the parent
+          // host component also hasn't hydrated yet. We can return it
+          // below since it will bail out on the isMounted check later.
+        }
+      }
+
+      return targetInst;
+    }
+
+    targetNode = parentNode;
+    parentNode = targetNode.parentNode;
+  }
+
+  return null;
+}
+/**
+ * Given a DOM node, return the ReactDOMComponent or ReactDOMTextComponent
+ * instance, or null if the node was not rendered by this React.
+ */
+
+function getInstanceFromNode$1(node) {
+  var inst = node[internalInstanceKey] || node[internalContainerInstanceKey];
+
+  if (inst) {
+    if (inst.tag === HostComponent || inst.tag === HostText || inst.tag === SuspenseComponent || inst.tag === HostRoot) {
+      return inst;
+    } else {
+      return null;
+    }
+  }
+
+  return null;
+}
+/**
+ * Given a ReactDOMComponent or ReactDOMTextComponent, return the corresponding
+ * DOM node.
+ */
+
+function getNodeFromInstance$1(inst) {
+  if (inst.tag === HostComponent || inst.tag === HostText) {
+    // In Fiber this, is just the state node right now. We assume it will be
+    // a host component or host text.
+    return inst.stateNode;
+  } // Without this first invariant, passing a non-DOM-component triggers the next
+  // invariant for a missing parent, which is super confusing.
+
+
+  {
+    {
+      throw Error( "getNodeFromInstance: Invalid argument." );
+    }
+  }
+}
+function getFiberCurrentPropsFromNode$1(node) {
+  return node[internalEventHandlersKey] || null;
+}
+function updateFiberProps(node, props) {
+  node[internalEventHandlersKey] = props;
+}
+
+function getParent(inst) {
+  do {
+    inst = inst.return; // TODO: If this is a HostRoot we might want to bail out.
+    // That is depending on if we want nested subtrees (layers) to bubble
+    // events to their parent. We could also go through parentNode on the
+    // host node but that wouldn't work for React Native and doesn't let us
+    // do the portal feature.
+  } while (inst && inst.tag !== HostComponent);
+
+  if (inst) {
+    return inst;
+  }
+
+  return null;
+}
+/**
+ * Return the lowest common ancestor of A and B, or null if they are in
+ * different trees.
+ */
+
+
+function getLowestCommonAncestor(instA, instB) {
+  var depthA = 0;
+
+  for (var tempA = instA; tempA; tempA = getParent(tempA)) {
+    depthA++;
+  }
+
+  var depthB = 0;
+
+  for (var tempB = instB; tempB; tempB = getParent(tempB)) {
+    depthB++;
+  } // If A is deeper, crawl up.
+
+
+  while (depthA - depthB > 0) {
+    instA = getParent(instA);
+    depthA--;
+  } // If B is deeper, crawl up.
+
+
+  while (depthB - depthA > 0) {
+    instB = getParent(instB);
+    depthB--;
+  } // Walk in lockstep until we find a match.
+
+
+  var depth = depthA;
+
+  while (depth--) {
+    if (instA === instB || instA === instB.alternate) {
+      return instA;
+    }
+
+    instA = getParent(instA);
+    instB = getParent(instB);
+  }
+
+  return null;
+}
+/**
+ * Simulates the traversal of a two-phase, capture/bubble event dispatch.
+ */
+
+function traverseTwoPhase(inst, fn, arg) {
+  var path = [];
+
+  while (inst) {
+    path.push(inst);
+    inst = getParent(inst);
+  }
+
+  var i;
+
+  for (i = path.length; i-- > 0;) {
+    fn(path[i], 'captured', arg);
+  }
+
+  for (i = 0; i < path.length; i++) {
+    fn(path[i], 'bubbled', arg);
+  }
+}
+/**
+ * Traverses the ID hierarchy and invokes the supplied `cb` on any IDs that
+ * should would receive a `mouseEnter` or `mouseLeave` event.
+ *
+ * Does not invoke the callback on the nearest common ancestor because nothing
+ * "entered" or "left" that element.
+ */
+
+function traverseEnterLeave(from, to, fn, argFrom, argTo) {
+  var common = from && to ? getLowestCommonAncestor(from, to) : null;
+  var pathFrom = [];
+
+  while (true) {
+    if (!from) {
+      break;
+    }
+
+    if (from === common) {
+      break;
+    }
+
+    var alternate = from.alternate;
+
+    if (alternate !== null && alternate === common) {
+      break;
+    }
+
+    pathFrom.push(from);
+    from = getParent(from);
+  }
+
+  var pathTo = [];
+
+  while (true) {
+    if (!to) {
+      break;
+    }
+
+    if (to === common) {
+      break;
+    }
+
+    var _alternate = to.alternate;
+
+    if (_alternate !== null && _alternate === common) {
+      break;
+    }
+
+    pathTo.push(to);
+    to = getParent(to);
+  }
+
+  for (var i = 0; i < pathFrom.length; i++) {
+    fn(pathFrom[i], 'bubbled', argFrom);
+  }
+
+  for (var _i = pathTo.length; _i-- > 0;) {
+    fn(pathTo[_i], 'captured', argTo);
+  }
+}
+
+function isInteractive(tag) {
+  return tag === 'button' || ta
