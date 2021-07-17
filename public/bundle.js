@@ -55913,4 +55913,320 @@ var SyntheticMouseEvent = SyntheticUIEvent.extend({
   getModifierState: getEventModifierState,
   button: null,
   buttons: null,
-  
+  relatedTarget: function (event) {
+    return event.relatedTarget || (event.fromElement === event.srcElement ? event.toElement : event.fromElement);
+  },
+  movementX: function (event) {
+    if ('movementX' in event) {
+      return event.movementX;
+    }
+
+    var screenX = previousScreenX;
+    previousScreenX = event.screenX;
+
+    if (!isMovementXSet) {
+      isMovementXSet = true;
+      return 0;
+    }
+
+    return event.type === 'mousemove' ? event.screenX - screenX : 0;
+  },
+  movementY: function (event) {
+    if ('movementY' in event) {
+      return event.movementY;
+    }
+
+    var screenY = previousScreenY;
+    previousScreenY = event.screenY;
+
+    if (!isMovementYSet) {
+      isMovementYSet = true;
+      return 0;
+    }
+
+    return event.type === 'mousemove' ? event.screenY - screenY : 0;
+  }
+});
+
+/**
+ * @interface PointerEvent
+ * @see http://www.w3.org/TR/pointerevents/
+ */
+
+var SyntheticPointerEvent = SyntheticMouseEvent.extend({
+  pointerId: null,
+  width: null,
+  height: null,
+  pressure: null,
+  tangentialPressure: null,
+  tiltX: null,
+  tiltY: null,
+  twist: null,
+  pointerType: null,
+  isPrimary: null
+});
+
+var eventTypes$2 = {
+  mouseEnter: {
+    registrationName: 'onMouseEnter',
+    dependencies: [TOP_MOUSE_OUT, TOP_MOUSE_OVER]
+  },
+  mouseLeave: {
+    registrationName: 'onMouseLeave',
+    dependencies: [TOP_MOUSE_OUT, TOP_MOUSE_OVER]
+  },
+  pointerEnter: {
+    registrationName: 'onPointerEnter',
+    dependencies: [TOP_POINTER_OUT, TOP_POINTER_OVER]
+  },
+  pointerLeave: {
+    registrationName: 'onPointerLeave',
+    dependencies: [TOP_POINTER_OUT, TOP_POINTER_OVER]
+  }
+};
+var EnterLeaveEventPlugin = {
+  eventTypes: eventTypes$2,
+
+  /**
+   * For almost every interaction we care about, there will be both a top-level
+   * `mouseover` and `mouseout` event that occurs. Only use `mouseout` so that
+   * we do not extract duplicate events. However, moving the mouse into the
+   * browser from outside will not fire a `mouseout` event. In this case, we use
+   * the `mouseover` top-level event.
+   */
+  extractEvents: function (topLevelType, targetInst, nativeEvent, nativeEventTarget, eventSystemFlags) {
+    var isOverEvent = topLevelType === TOP_MOUSE_OVER || topLevelType === TOP_POINTER_OVER;
+    var isOutEvent = topLevelType === TOP_MOUSE_OUT || topLevelType === TOP_POINTER_OUT;
+
+    if (isOverEvent && (eventSystemFlags & IS_REPLAYED) === 0 && (nativeEvent.relatedTarget || nativeEvent.fromElement)) {
+      // If this is an over event with a target, then we've already dispatched
+      // the event in the out event of the other target. If this is replayed,
+      // then it's because we couldn't dispatch against this target previously
+      // so we have to do it now instead.
+      return null;
+    }
+
+    if (!isOutEvent && !isOverEvent) {
+      // Must not be a mouse or pointer in or out - ignoring.
+      return null;
+    }
+
+    var win;
+
+    if (nativeEventTarget.window === nativeEventTarget) {
+      // `nativeEventTarget` is probably a window object.
+      win = nativeEventTarget;
+    } else {
+      // TODO: Figure out why `ownerDocument` is sometimes undefined in IE8.
+      var doc = nativeEventTarget.ownerDocument;
+
+      if (doc) {
+        win = doc.defaultView || doc.parentWindow;
+      } else {
+        win = window;
+      }
+    }
+
+    var from;
+    var to;
+
+    if (isOutEvent) {
+      from = targetInst;
+      var related = nativeEvent.relatedTarget || nativeEvent.toElement;
+      to = related ? getClosestInstanceFromNode(related) : null;
+
+      if (to !== null) {
+        var nearestMounted = getNearestMountedFiber(to);
+
+        if (to !== nearestMounted || to.tag !== HostComponent && to.tag !== HostText) {
+          to = null;
+        }
+      }
+    } else {
+      // Moving to a node from outside the window.
+      from = null;
+      to = targetInst;
+    }
+
+    if (from === to) {
+      // Nothing pertains to our managed components.
+      return null;
+    }
+
+    var eventInterface, leaveEventType, enterEventType, eventTypePrefix;
+
+    if (topLevelType === TOP_MOUSE_OUT || topLevelType === TOP_MOUSE_OVER) {
+      eventInterface = SyntheticMouseEvent;
+      leaveEventType = eventTypes$2.mouseLeave;
+      enterEventType = eventTypes$2.mouseEnter;
+      eventTypePrefix = 'mouse';
+    } else if (topLevelType === TOP_POINTER_OUT || topLevelType === TOP_POINTER_OVER) {
+      eventInterface = SyntheticPointerEvent;
+      leaveEventType = eventTypes$2.pointerLeave;
+      enterEventType = eventTypes$2.pointerEnter;
+      eventTypePrefix = 'pointer';
+    }
+
+    var fromNode = from == null ? win : getNodeFromInstance$1(from);
+    var toNode = to == null ? win : getNodeFromInstance$1(to);
+    var leave = eventInterface.getPooled(leaveEventType, from, nativeEvent, nativeEventTarget);
+    leave.type = eventTypePrefix + 'leave';
+    leave.target = fromNode;
+    leave.relatedTarget = toNode;
+    var enter = eventInterface.getPooled(enterEventType, to, nativeEvent, nativeEventTarget);
+    enter.type = eventTypePrefix + 'enter';
+    enter.target = toNode;
+    enter.relatedTarget = fromNode;
+    accumulateEnterLeaveDispatches(leave, enter, from, to); // If we are not processing the first ancestor, then we
+    // should not process the same nativeEvent again, as we
+    // will have already processed it in the first ancestor.
+
+    if ((eventSystemFlags & IS_FIRST_ANCESTOR) === 0) {
+      return [leave];
+    }
+
+    return [leave, enter];
+  }
+};
+
+/**
+ * inlined Object.is polyfill to avoid requiring consumers ship their own
+ * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is
+ */
+function is(x, y) {
+  return x === y && (x !== 0 || 1 / x === 1 / y) || x !== x && y !== y // eslint-disable-line no-self-compare
+  ;
+}
+
+var objectIs = typeof Object.is === 'function' ? Object.is : is;
+
+var hasOwnProperty$2 = Object.prototype.hasOwnProperty;
+/**
+ * Performs equality by iterating through keys on an object and returning false
+ * when any key has values which are not strictly equal between the arguments.
+ * Returns true when the values of all keys are strictly equal.
+ */
+
+function shallowEqual(objA, objB) {
+  if (objectIs(objA, objB)) {
+    return true;
+  }
+
+  if (typeof objA !== 'object' || objA === null || typeof objB !== 'object' || objB === null) {
+    return false;
+  }
+
+  var keysA = Object.keys(objA);
+  var keysB = Object.keys(objB);
+
+  if (keysA.length !== keysB.length) {
+    return false;
+  } // Test for A's keys different from B.
+
+
+  for (var i = 0; i < keysA.length; i++) {
+    if (!hasOwnProperty$2.call(objB, keysA[i]) || !objectIs(objA[keysA[i]], objB[keysA[i]])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+var skipSelectionChangeEvent = canUseDOM && 'documentMode' in document && document.documentMode <= 11;
+var eventTypes$3 = {
+  select: {
+    phasedRegistrationNames: {
+      bubbled: 'onSelect',
+      captured: 'onSelectCapture'
+    },
+    dependencies: [TOP_BLUR, TOP_CONTEXT_MENU, TOP_DRAG_END, TOP_FOCUS, TOP_KEY_DOWN, TOP_KEY_UP, TOP_MOUSE_DOWN, TOP_MOUSE_UP, TOP_SELECTION_CHANGE]
+  }
+};
+var activeElement$1 = null;
+var activeElementInst$1 = null;
+var lastSelection = null;
+var mouseDown = false;
+/**
+ * Get an object which is a unique representation of the current selection.
+ *
+ * The return value will not be consistent across nodes or browsers, but
+ * two identical selections on the same node will return identical objects.
+ *
+ * @param {DOMElement} node
+ * @return {object}
+ */
+
+function getSelection$1(node) {
+  if ('selectionStart' in node && hasSelectionCapabilities(node)) {
+    return {
+      start: node.selectionStart,
+      end: node.selectionEnd
+    };
+  } else {
+    var win = node.ownerDocument && node.ownerDocument.defaultView || window;
+    var selection = win.getSelection();
+    return {
+      anchorNode: selection.anchorNode,
+      anchorOffset: selection.anchorOffset,
+      focusNode: selection.focusNode,
+      focusOffset: selection.focusOffset
+    };
+  }
+}
+/**
+ * Get document associated with the event target.
+ *
+ * @param {object} nativeEventTarget
+ * @return {Document}
+ */
+
+
+function getEventTargetDocument(eventTarget) {
+  return eventTarget.window === eventTarget ? eventTarget.document : eventTarget.nodeType === DOCUMENT_NODE ? eventTarget : eventTarget.ownerDocument;
+}
+/**
+ * Poll selection to see whether it's changed.
+ *
+ * @param {object} nativeEvent
+ * @param {object} nativeEventTarget
+ * @return {?SyntheticEvent}
+ */
+
+
+function constructSelectEvent(nativeEvent, nativeEventTarget) {
+  // Ensure we have the right element, and that the user is not dragging a
+  // selection (this matches native `select` event behavior). In HTML5, select
+  // fires only on input and textarea thus if there's no focused element we
+  // won't dispatch.
+  var doc = getEventTargetDocument(nativeEventTarget);
+
+  if (mouseDown || activeElement$1 == null || activeElement$1 !== getActiveElement(doc)) {
+    return null;
+  } // Only fire when selection has actually changed.
+
+
+  var currentSelection = getSelection$1(activeElement$1);
+
+  if (!lastSelection || !shallowEqual(lastSelection, currentSelection)) {
+    lastSelection = currentSelection;
+    var syntheticEvent = SyntheticEvent.getPooled(eventTypes$3.select, activeElementInst$1, nativeEvent, nativeEventTarget);
+    syntheticEvent.type = 'select';
+    syntheticEvent.target = activeElement$1;
+    accumulateTwoPhaseDispatches(syntheticEvent);
+    return syntheticEvent;
+  }
+
+  return null;
+}
+/**
+ * This plugin creates an `onSelect` event that normalizes select events
+ * across form elements.
+ *
+ * Supported elements are:
+ * - input (see `isTextInputElement`)
+ * - textarea
+ * - contentEditable
+ *
+ * This differs from native browser implementations in the following ways:
+ * - Fires on contentEditable field
