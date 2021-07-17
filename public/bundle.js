@@ -56571,4 +56571,277 @@ var SyntheticTransitionEvent = SyntheticEvent.extend({
 var SyntheticWheelEvent = SyntheticMouseEvent.extend({
   deltaX: function (event) {
     return 'deltaX' in event ? event.deltaX : // Fallback to `wheelDeltaX` for Webkit and normalize (right is positive).
-    'wheelDelt
+    'wheelDeltaX' in event ? -event.wheelDeltaX : 0;
+  },
+  deltaY: function (event) {
+    return 'deltaY' in event ? event.deltaY : // Fallback to `wheelDeltaY` for Webkit and normalize (down is positive).
+    'wheelDeltaY' in event ? -event.wheelDeltaY : // Fallback to `wheelDelta` for IE<9 and normalize (down is positive).
+    'wheelDelta' in event ? -event.wheelDelta : 0;
+  },
+  deltaZ: null,
+  // Browsers without "deltaMode" is reporting in raw wheel delta where one
+  // notch on the scroll is always +/- 120, roughly equivalent to pixels.
+  // A good approximation of DOM_DELTA_LINE (1) is 5% of viewport size or
+  // ~40 pixels, for DOM_DELTA_SCREEN (2) it is 87.5% of viewport size.
+  deltaMode: null
+});
+
+var knownHTMLTopLevelTypes = [TOP_ABORT, TOP_CANCEL, TOP_CAN_PLAY, TOP_CAN_PLAY_THROUGH, TOP_CLOSE, TOP_DURATION_CHANGE, TOP_EMPTIED, TOP_ENCRYPTED, TOP_ENDED, TOP_ERROR, TOP_INPUT, TOP_INVALID, TOP_LOAD, TOP_LOADED_DATA, TOP_LOADED_METADATA, TOP_LOAD_START, TOP_PAUSE, TOP_PLAY, TOP_PLAYING, TOP_PROGRESS, TOP_RATE_CHANGE, TOP_RESET, TOP_SEEKED, TOP_SEEKING, TOP_STALLED, TOP_SUBMIT, TOP_SUSPEND, TOP_TIME_UPDATE, TOP_TOGGLE, TOP_VOLUME_CHANGE, TOP_WAITING];
+var SimpleEventPlugin = {
+  // simpleEventPluginEventTypes gets populated from
+  // the DOMEventProperties module.
+  eventTypes: simpleEventPluginEventTypes,
+  extractEvents: function (topLevelType, targetInst, nativeEvent, nativeEventTarget, eventSystemFlags) {
+    var dispatchConfig = topLevelEventsToDispatchConfig.get(topLevelType);
+
+    if (!dispatchConfig) {
+      return null;
+    }
+
+    var EventConstructor;
+
+    switch (topLevelType) {
+      case TOP_KEY_PRESS:
+        // Firefox creates a keypress event for function keys too. This removes
+        // the unwanted keypress events. Enter is however both printable and
+        // non-printable. One would expect Tab to be as well (but it isn't).
+        if (getEventCharCode(nativeEvent) === 0) {
+          return null;
+        }
+
+      /* falls through */
+
+      case TOP_KEY_DOWN:
+      case TOP_KEY_UP:
+        EventConstructor = SyntheticKeyboardEvent;
+        break;
+
+      case TOP_BLUR:
+      case TOP_FOCUS:
+        EventConstructor = SyntheticFocusEvent;
+        break;
+
+      case TOP_CLICK:
+        // Firefox creates a click event on right mouse clicks. This removes the
+        // unwanted click events.
+        if (nativeEvent.button === 2) {
+          return null;
+        }
+
+      /* falls through */
+
+      case TOP_AUX_CLICK:
+      case TOP_DOUBLE_CLICK:
+      case TOP_MOUSE_DOWN:
+      case TOP_MOUSE_MOVE:
+      case TOP_MOUSE_UP: // TODO: Disabled elements should not respond to mouse events
+
+      /* falls through */
+
+      case TOP_MOUSE_OUT:
+      case TOP_MOUSE_OVER:
+      case TOP_CONTEXT_MENU:
+        EventConstructor = SyntheticMouseEvent;
+        break;
+
+      case TOP_DRAG:
+      case TOP_DRAG_END:
+      case TOP_DRAG_ENTER:
+      case TOP_DRAG_EXIT:
+      case TOP_DRAG_LEAVE:
+      case TOP_DRAG_OVER:
+      case TOP_DRAG_START:
+      case TOP_DROP:
+        EventConstructor = SyntheticDragEvent;
+        break;
+
+      case TOP_TOUCH_CANCEL:
+      case TOP_TOUCH_END:
+      case TOP_TOUCH_MOVE:
+      case TOP_TOUCH_START:
+        EventConstructor = SyntheticTouchEvent;
+        break;
+
+      case TOP_ANIMATION_END:
+      case TOP_ANIMATION_ITERATION:
+      case TOP_ANIMATION_START:
+        EventConstructor = SyntheticAnimationEvent;
+        break;
+
+      case TOP_TRANSITION_END:
+        EventConstructor = SyntheticTransitionEvent;
+        break;
+
+      case TOP_SCROLL:
+        EventConstructor = SyntheticUIEvent;
+        break;
+
+      case TOP_WHEEL:
+        EventConstructor = SyntheticWheelEvent;
+        break;
+
+      case TOP_COPY:
+      case TOP_CUT:
+      case TOP_PASTE:
+        EventConstructor = SyntheticClipboardEvent;
+        break;
+
+      case TOP_GOT_POINTER_CAPTURE:
+      case TOP_LOST_POINTER_CAPTURE:
+      case TOP_POINTER_CANCEL:
+      case TOP_POINTER_DOWN:
+      case TOP_POINTER_MOVE:
+      case TOP_POINTER_OUT:
+      case TOP_POINTER_OVER:
+      case TOP_POINTER_UP:
+        EventConstructor = SyntheticPointerEvent;
+        break;
+
+      default:
+        {
+          if (knownHTMLTopLevelTypes.indexOf(topLevelType) === -1) {
+            error('SimpleEventPlugin: Unhandled event type, `%s`. This warning ' + 'is likely caused by a bug in React. Please file an issue.', topLevelType);
+          }
+        } // HTML Events
+        // @see http://www.w3.org/TR/html5/index.html#events-0
+
+
+        EventConstructor = SyntheticEvent;
+        break;
+    }
+
+    var event = EventConstructor.getPooled(dispatchConfig, targetInst, nativeEvent, nativeEventTarget);
+    accumulateTwoPhaseDispatches(event);
+    return event;
+  }
+};
+
+/**
+ * Specifies a deterministic ordering of `EventPlugin`s. A convenient way to
+ * reason about plugins, without having to package every one of them. This
+ * is better than having plugins be ordered in the same order that they
+ * are injected because that ordering would be influenced by the packaging order.
+ * `ResponderEventPlugin` must occur before `SimpleEventPlugin` so that
+ * preventing default on events is convenient in `SimpleEventPlugin` handlers.
+ */
+
+var DOMEventPluginOrder = ['ResponderEventPlugin', 'SimpleEventPlugin', 'EnterLeaveEventPlugin', 'ChangeEventPlugin', 'SelectEventPlugin', 'BeforeInputEventPlugin'];
+/**
+ * Inject modules for resolving DOM hierarchy and plugin ordering.
+ */
+
+injectEventPluginOrder(DOMEventPluginOrder);
+setComponentTree(getFiberCurrentPropsFromNode$1, getInstanceFromNode$1, getNodeFromInstance$1);
+/**
+ * Some important event plugins included by default (without having to require
+ * them).
+ */
+
+injectEventPluginsByName({
+  SimpleEventPlugin: SimpleEventPlugin,
+  EnterLeaveEventPlugin: EnterLeaveEventPlugin,
+  ChangeEventPlugin: ChangeEventPlugin,
+  SelectEventPlugin: SelectEventPlugin,
+  BeforeInputEventPlugin: BeforeInputEventPlugin
+});
+
+// Prefix measurements so that it's possible to filter them.
+// Longer prefixes are hard to read in DevTools.
+var reactEmoji = "\u269B";
+var warningEmoji = "\u26D4";
+var supportsUserTiming = typeof performance !== 'undefined' && typeof performance.mark === 'function' && typeof performance.clearMarks === 'function' && typeof performance.measure === 'function' && typeof performance.clearMeasures === 'function'; // Keep track of current fiber so that we know the path to unwind on pause.
+// TODO: this looks the same as nextUnitOfWork in scheduler. Can we unify them?
+
+var currentFiber = null; // If we're in the middle of user code, which fiber and method is it?
+// Reusing `currentFiber` would be confusing for this because user code fiber
+// can change during commit phase too, but we don't need to unwind it (since
+// lifecycles in the commit phase don't resemble a tree).
+
+var currentPhase = null;
+var currentPhaseFiber = null; // Did lifecycle hook schedule an update? This is often a performance problem,
+// so we will keep track of it, and include it in the report.
+// Track commits caused by cascading updates.
+
+var isCommitting = false;
+var hasScheduledUpdateInCurrentCommit = false;
+var hasScheduledUpdateInCurrentPhase = false;
+var commitCountInCurrentWorkLoop = 0;
+var effectCountInCurrentCommit = 0;
+// to avoid stretch the commit phase with measurement overhead.
+
+var labelsInCurrentCommit = new Set();
+
+var formatMarkName = function (markName) {
+  return reactEmoji + " " + markName;
+};
+
+var formatLabel = function (label, warning) {
+  var prefix = warning ? warningEmoji + " " : reactEmoji + " ";
+  var suffix = warning ? " Warning: " + warning : '';
+  return "" + prefix + label + suffix;
+};
+
+var beginMark = function (markName) {
+  performance.mark(formatMarkName(markName));
+};
+
+var clearMark = function (markName) {
+  performance.clearMarks(formatMarkName(markName));
+};
+
+var endMark = function (label, markName, warning) {
+  var formattedMarkName = formatMarkName(markName);
+  var formattedLabel = formatLabel(label, warning);
+
+  try {
+    performance.measure(formattedLabel, formattedMarkName);
+  } catch (err) {} // If previous mark was missing for some reason, this will throw.
+  // This could only happen if React crashed in an unexpected place earlier.
+  // Don't pile on with more errors.
+  // Clear marks immediately to avoid growing buffer.
+
+
+  performance.clearMarks(formattedMarkName);
+  performance.clearMeasures(formattedLabel);
+};
+
+var getFiberMarkName = function (label, debugID) {
+  return label + " (#" + debugID + ")";
+};
+
+var getFiberLabel = function (componentName, isMounted, phase) {
+  if (phase === null) {
+    // These are composite component total time measurements.
+    return componentName + " [" + (isMounted ? 'update' : 'mount') + "]";
+  } else {
+    // Composite component methods.
+    return componentName + "." + phase;
+  }
+};
+
+var beginFiberMark = function (fiber, phase) {
+  var componentName = getComponentName(fiber.type) || 'Unknown';
+  var debugID = fiber._debugID;
+  var isMounted = fiber.alternate !== null;
+  var label = getFiberLabel(componentName, isMounted, phase);
+
+  if (isCommitting && labelsInCurrentCommit.has(label)) {
+    // During the commit phase, we don't show duplicate labels because
+    // there is a fixed overhead for every measurement, and we don't
+    // want to stretch the commit phase beyond necessary.
+    return false;
+  }
+
+  labelsInCurrentCommit.add(label);
+  var markName = getFiberMarkName(label, debugID);
+  beginMark(markName);
+  return true;
+};
+
+var clearFiberMark = function (fiber, phase) {
+  var componentName = getComponentName(fiber.type) || 'Unknown';
+  var debugID = fiber._debugID;
+  var isMounted = fiber.alternate !== null;
+  var label = getFiberLabel(componentName, isMounted, phase);
+  var markName = getFiberMarkName(label, debugID);
+  clearMar
