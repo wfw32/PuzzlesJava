@@ -56844,4 +56844,411 @@ var clearFiberMark = function (fiber, phase) {
   var isMounted = fiber.alternate !== null;
   var label = getFiberLabel(componentName, isMounted, phase);
   var markName = getFiberMarkName(label, debugID);
-  clearMar
+  clearMark(markName);
+};
+
+var endFiberMark = function (fiber, phase, warning) {
+  var componentName = getComponentName(fiber.type) || 'Unknown';
+  var debugID = fiber._debugID;
+  var isMounted = fiber.alternate !== null;
+  var label = getFiberLabel(componentName, isMounted, phase);
+  var markName = getFiberMarkName(label, debugID);
+  endMark(label, markName, warning);
+};
+
+var shouldIgnoreFiber = function (fiber) {
+  // Host components should be skipped in the timeline.
+  // We could check typeof fiber.type, but does this work with RN?
+  switch (fiber.tag) {
+    case HostRoot:
+    case HostComponent:
+    case HostText:
+    case HostPortal:
+    case Fragment:
+    case ContextProvider:
+    case ContextConsumer:
+    case Mode:
+      return true;
+
+    default:
+      return false;
+  }
+};
+
+var clearPendingPhaseMeasurement = function () {
+  if (currentPhase !== null && currentPhaseFiber !== null) {
+    clearFiberMark(currentPhaseFiber, currentPhase);
+  }
+
+  currentPhaseFiber = null;
+  currentPhase = null;
+  hasScheduledUpdateInCurrentPhase = false;
+};
+
+var pauseTimers = function () {
+  // Stops all currently active measurements so that they can be resumed
+  // if we continue in a later deferred loop from the same unit of work.
+  var fiber = currentFiber;
+
+  while (fiber) {
+    if (fiber._debugIsCurrentlyTiming) {
+      endFiberMark(fiber, null, null);
+    }
+
+    fiber = fiber.return;
+  }
+};
+
+var resumeTimersRecursively = function (fiber) {
+  if (fiber.return !== null) {
+    resumeTimersRecursively(fiber.return);
+  }
+
+  if (fiber._debugIsCurrentlyTiming) {
+    beginFiberMark(fiber, null);
+  }
+};
+
+var resumeTimers = function () {
+  // Resumes all measurements that were active during the last deferred loop.
+  if (currentFiber !== null) {
+    resumeTimersRecursively(currentFiber);
+  }
+};
+
+function recordEffect() {
+  {
+    effectCountInCurrentCommit++;
+  }
+}
+function recordScheduleUpdate() {
+  {
+    if (isCommitting) {
+      hasScheduledUpdateInCurrentCommit = true;
+    }
+
+    if (currentPhase !== null && currentPhase !== 'componentWillMount' && currentPhase !== 'componentWillReceiveProps') {
+      hasScheduledUpdateInCurrentPhase = true;
+    }
+  }
+}
+function startWorkTimer(fiber) {
+  {
+    if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
+      return;
+    } // If we pause, this is the fiber to unwind from.
+
+
+    currentFiber = fiber;
+
+    if (!beginFiberMark(fiber, null)) {
+      return;
+    }
+
+    fiber._debugIsCurrentlyTiming = true;
+  }
+}
+function cancelWorkTimer(fiber) {
+  {
+    if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
+      return;
+    } // Remember we shouldn't complete measurement for this fiber.
+    // Otherwise flamechart will be deep even for small updates.
+
+
+    fiber._debugIsCurrentlyTiming = false;
+    clearFiberMark(fiber, null);
+  }
+}
+function stopWorkTimer(fiber) {
+  {
+    if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
+      return;
+    } // If we pause, its parent is the fiber to unwind from.
+
+
+    currentFiber = fiber.return;
+
+    if (!fiber._debugIsCurrentlyTiming) {
+      return;
+    }
+
+    fiber._debugIsCurrentlyTiming = false;
+    endFiberMark(fiber, null, null);
+  }
+}
+function stopFailedWorkTimer(fiber) {
+  {
+    if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
+      return;
+    } // If we pause, its parent is the fiber to unwind from.
+
+
+    currentFiber = fiber.return;
+
+    if (!fiber._debugIsCurrentlyTiming) {
+      return;
+    }
+
+    fiber._debugIsCurrentlyTiming = false;
+    var warning = fiber.tag === SuspenseComponent ? 'Rendering was suspended' : 'An error was thrown inside this error boundary';
+    endFiberMark(fiber, null, warning);
+  }
+}
+function startPhaseTimer(fiber, phase) {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    clearPendingPhaseMeasurement();
+
+    if (!beginFiberMark(fiber, phase)) {
+      return;
+    }
+
+    currentPhaseFiber = fiber;
+    currentPhase = phase;
+  }
+}
+function stopPhaseTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    if (currentPhase !== null && currentPhaseFiber !== null) {
+      var warning = hasScheduledUpdateInCurrentPhase ? 'Scheduled a cascading update' : null;
+      endFiberMark(currentPhaseFiber, currentPhase, warning);
+    }
+
+    currentPhase = null;
+    currentPhaseFiber = null;
+  }
+}
+function startWorkLoopTimer(nextUnitOfWork) {
+  {
+    currentFiber = nextUnitOfWork;
+
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    commitCountInCurrentWorkLoop = 0; // This is top level call.
+    // Any other measurements are performed within.
+
+    beginMark('(React Tree Reconciliation)'); // Resume any measurements that were in progress during the last loop.
+
+    resumeTimers();
+  }
+}
+function stopWorkLoopTimer(interruptedBy, didCompleteRoot) {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    var warning = null;
+
+    if (interruptedBy !== null) {
+      if (interruptedBy.tag === HostRoot) {
+        warning = 'A top-level update interrupted the previous render';
+      } else {
+        var componentName = getComponentName(interruptedBy.type) || 'Unknown';
+        warning = "An update to " + componentName + " interrupted the previous render";
+      }
+    } else if (commitCountInCurrentWorkLoop > 1) {
+      warning = 'There were cascading updates';
+    }
+
+    commitCountInCurrentWorkLoop = 0;
+    var label = didCompleteRoot ? '(React Tree Reconciliation: Completed Root)' : '(React Tree Reconciliation: Yielded)'; // Pause any measurements until the next loop.
+
+    pauseTimers();
+    endMark(label, '(React Tree Reconciliation)', warning);
+  }
+}
+function startCommitTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    isCommitting = true;
+    hasScheduledUpdateInCurrentCommit = false;
+    labelsInCurrentCommit.clear();
+    beginMark('(Committing Changes)');
+  }
+}
+function stopCommitTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    var warning = null;
+
+    if (hasScheduledUpdateInCurrentCommit) {
+      warning = 'Lifecycle hook scheduled a cascading update';
+    } else if (commitCountInCurrentWorkLoop > 0) {
+      warning = 'Caused by a cascading update in earlier commit';
+    }
+
+    hasScheduledUpdateInCurrentCommit = false;
+    commitCountInCurrentWorkLoop++;
+    isCommitting = false;
+    labelsInCurrentCommit.clear();
+    endMark('(Committing Changes)', '(Committing Changes)', warning);
+  }
+}
+function startCommitSnapshotEffectsTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    effectCountInCurrentCommit = 0;
+    beginMark('(Committing Snapshot Effects)');
+  }
+}
+function stopCommitSnapshotEffectsTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    var count = effectCountInCurrentCommit;
+    effectCountInCurrentCommit = 0;
+    endMark("(Committing Snapshot Effects: " + count + " Total)", '(Committing Snapshot Effects)', null);
+  }
+}
+function startCommitHostEffectsTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    effectCountInCurrentCommit = 0;
+    beginMark('(Committing Host Effects)');
+  }
+}
+function stopCommitHostEffectsTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    var count = effectCountInCurrentCommit;
+    effectCountInCurrentCommit = 0;
+    endMark("(Committing Host Effects: " + count + " Total)", '(Committing Host Effects)', null);
+  }
+}
+function startCommitLifeCyclesTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    effectCountInCurrentCommit = 0;
+    beginMark('(Calling Lifecycle Methods)');
+  }
+}
+function stopCommitLifeCyclesTimer() {
+  {
+    if (!supportsUserTiming) {
+      return;
+    }
+
+    var count = effectCountInCurrentCommit;
+    effectCountInCurrentCommit = 0;
+    endMark("(Calling Lifecycle Methods: " + count + " Total)", '(Calling Lifecycle Methods)', null);
+  }
+}
+
+var valueStack = [];
+var fiberStack;
+
+{
+  fiberStack = [];
+}
+
+var index = -1;
+
+function createCursor(defaultValue) {
+  return {
+    current: defaultValue
+  };
+}
+
+function pop(cursor, fiber) {
+  if (index < 0) {
+    {
+      error('Unexpected pop.');
+    }
+
+    return;
+  }
+
+  {
+    if (fiber !== fiberStack[index]) {
+      error('Unexpected Fiber popped.');
+    }
+  }
+
+  cursor.current = valueStack[index];
+  valueStack[index] = null;
+
+  {
+    fiberStack[index] = null;
+  }
+
+  index--;
+}
+
+function push(cursor, value, fiber) {
+  index++;
+  valueStack[index] = cursor.current;
+
+  {
+    fiberStack[index] = fiber;
+  }
+
+  cursor.current = value;
+}
+
+var warnedAboutMissingGetChildContext;
+
+{
+  warnedAboutMissingGetChildContext = {};
+}
+
+var emptyContextObject = {};
+
+{
+  Object.freeze(emptyContextObject);
+} // A cursor to the current merged context object on the stack.
+
+
+var contextStackCursor = createCursor(emptyContextObject); // A cursor to a boolean indicating whether the context has changed.
+
+var didPerformWorkStackCursor = createCursor(false); // Keep track of the previous context object that was on the stack.
+// We use this to get access to the parent context after we have already
+// pushed the next context provider, and now need to merge their contexts.
+
+var previousContext = emptyContextObject;
+
+function getUnmaskedContext(workInProgress, Component, didPushOwnContextIfProvider) {
+  {
+    if (didPushOwnContextIfProvider && isContextProvider(Component)) {
+      // If the fiber is a context provider itself, when we read its context
+      // we may have already pushed its own child context on the stack. A context
+      // provider should not "see" its own child context. Therefore we read the
+      // previous (parent) context instead for a context provider.
+      return previousContext;
+    }
+
+    return contextStackCursor.current;
+  }
+}
+
+function cacheContext(workInProgress, unmaskedContext, maskedCont
