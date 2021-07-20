@@ -57251,4 +57251,271 @@ function getUnmaskedContext(workInProgress, Component, didPushOwnContextIfProvid
   }
 }
 
-function cacheContext(workInProgress, unmaskedContext, maskedCont
+function cacheContext(workInProgress, unmaskedContext, maskedContext) {
+  {
+    var instance = workInProgress.stateNode;
+    instance.__reactInternalMemoizedUnmaskedChildContext = unmaskedContext;
+    instance.__reactInternalMemoizedMaskedChildContext = maskedContext;
+  }
+}
+
+function getMaskedContext(workInProgress, unmaskedContext) {
+  {
+    var type = workInProgress.type;
+    var contextTypes = type.contextTypes;
+
+    if (!contextTypes) {
+      return emptyContextObject;
+    } // Avoid recreating masked context unless unmasked context has changed.
+    // Failing to do this will result in unnecessary calls to componentWillReceiveProps.
+    // This may trigger infinite loops if componentWillReceiveProps calls setState.
+
+
+    var instance = workInProgress.stateNode;
+
+    if (instance && instance.__reactInternalMemoizedUnmaskedChildContext === unmaskedContext) {
+      return instance.__reactInternalMemoizedMaskedChildContext;
+    }
+
+    var context = {};
+
+    for (var key in contextTypes) {
+      context[key] = unmaskedContext[key];
+    }
+
+    {
+      var name = getComponentName(type) || 'Unknown';
+      checkPropTypes(contextTypes, context, 'context', name, getCurrentFiberStackInDev);
+    } // Cache unmasked context so we can avoid recreating masked context unless necessary.
+    // Context is created before the class component is instantiated so check for instance.
+
+
+    if (instance) {
+      cacheContext(workInProgress, unmaskedContext, context);
+    }
+
+    return context;
+  }
+}
+
+function hasContextChanged() {
+  {
+    return didPerformWorkStackCursor.current;
+  }
+}
+
+function isContextProvider(type) {
+  {
+    var childContextTypes = type.childContextTypes;
+    return childContextTypes !== null && childContextTypes !== undefined;
+  }
+}
+
+function popContext(fiber) {
+  {
+    pop(didPerformWorkStackCursor, fiber);
+    pop(contextStackCursor, fiber);
+  }
+}
+
+function popTopLevelContextObject(fiber) {
+  {
+    pop(didPerformWorkStackCursor, fiber);
+    pop(contextStackCursor, fiber);
+  }
+}
+
+function pushTopLevelContextObject(fiber, context, didChange) {
+  {
+    if (!(contextStackCursor.current === emptyContextObject)) {
+      {
+        throw Error( "Unexpected context found on stack. This error is likely caused by a bug in React. Please file an issue." );
+      }
+    }
+
+    push(contextStackCursor, context, fiber);
+    push(didPerformWorkStackCursor, didChange, fiber);
+  }
+}
+
+function processChildContext(fiber, type, parentContext) {
+  {
+    var instance = fiber.stateNode;
+    var childContextTypes = type.childContextTypes; // TODO (bvaughn) Replace this behavior with an invariant() in the future.
+    // It has only been added in Fiber to match the (unintentional) behavior in Stack.
+
+    if (typeof instance.getChildContext !== 'function') {
+      {
+        var componentName = getComponentName(type) || 'Unknown';
+
+        if (!warnedAboutMissingGetChildContext[componentName]) {
+          warnedAboutMissingGetChildContext[componentName] = true;
+
+          error('%s.childContextTypes is specified but there is no getChildContext() method ' + 'on the instance. You can either define getChildContext() on %s or remove ' + 'childContextTypes from it.', componentName, componentName);
+        }
+      }
+
+      return parentContext;
+    }
+
+    var childContext;
+    startPhaseTimer(fiber, 'getChildContext');
+    childContext = instance.getChildContext();
+    stopPhaseTimer();
+
+    for (var contextKey in childContext) {
+      if (!(contextKey in childContextTypes)) {
+        {
+          throw Error( (getComponentName(type) || 'Unknown') + ".getChildContext(): key \"" + contextKey + "\" is not defined in childContextTypes." );
+        }
+      }
+    }
+
+    {
+      var name = getComponentName(type) || 'Unknown';
+      checkPropTypes(childContextTypes, childContext, 'child context', name, // In practice, there is one case in which we won't get a stack. It's when
+      // somebody calls unstable_renderSubtreeIntoContainer() and we process
+      // context from the parent component instance. The stack will be missing
+      // because it's outside of the reconciliation, and so the pointer has not
+      // been set. This is rare and doesn't matter. We'll also remove that API.
+      getCurrentFiberStackInDev);
+    }
+
+    return _assign({}, parentContext, {}, childContext);
+  }
+}
+
+function pushContextProvider(workInProgress) {
+  {
+    var instance = workInProgress.stateNode; // We push the context as early as possible to ensure stack integrity.
+    // If the instance does not exist yet, we will push null at first,
+    // and replace it on the stack later when invalidating the context.
+
+    var memoizedMergedChildContext = instance && instance.__reactInternalMemoizedMergedChildContext || emptyContextObject; // Remember the parent context so we can merge with it later.
+    // Inherit the parent's did-perform-work value to avoid inadvertently blocking updates.
+
+    previousContext = contextStackCursor.current;
+    push(contextStackCursor, memoizedMergedChildContext, workInProgress);
+    push(didPerformWorkStackCursor, didPerformWorkStackCursor.current, workInProgress);
+    return true;
+  }
+}
+
+function invalidateContextProvider(workInProgress, type, didChange) {
+  {
+    var instance = workInProgress.stateNode;
+
+    if (!instance) {
+      {
+        throw Error( "Expected to have an instance by this point. This error is likely caused by a bug in React. Please file an issue." );
+      }
+    }
+
+    if (didChange) {
+      // Merge parent and own context.
+      // Skip this if we're not updating due to sCU.
+      // This avoids unnecessarily recomputing memoized values.
+      var mergedContext = processChildContext(workInProgress, type, previousContext);
+      instance.__reactInternalMemoizedMergedChildContext = mergedContext; // Replace the old (or empty) context with the new one.
+      // It is important to unwind the context in the reverse order.
+
+      pop(didPerformWorkStackCursor, workInProgress);
+      pop(contextStackCursor, workInProgress); // Now push the new context and mark that it has changed.
+
+      push(contextStackCursor, mergedContext, workInProgress);
+      push(didPerformWorkStackCursor, didChange, workInProgress);
+    } else {
+      pop(didPerformWorkStackCursor, workInProgress);
+      push(didPerformWorkStackCursor, didChange, workInProgress);
+    }
+  }
+}
+
+function findCurrentUnmaskedContext(fiber) {
+  {
+    // Currently this is only used with renderSubtreeIntoContainer; not sure if it
+    // makes sense elsewhere
+    if (!(isFiberMounted(fiber) && fiber.tag === ClassComponent)) {
+      {
+        throw Error( "Expected subtree parent to be a mounted class component. This error is likely caused by a bug in React. Please file an issue." );
+      }
+    }
+
+    var node = fiber;
+
+    do {
+      switch (node.tag) {
+        case HostRoot:
+          return node.stateNode.context;
+
+        case ClassComponent:
+          {
+            var Component = node.type;
+
+            if (isContextProvider(Component)) {
+              return node.stateNode.__reactInternalMemoizedMergedChildContext;
+            }
+
+            break;
+          }
+      }
+
+      node = node.return;
+    } while (node !== null);
+
+    {
+      {
+        throw Error( "Found unexpected detached subtree parent. This error is likely caused by a bug in React. Please file an issue." );
+      }
+    }
+  }
+}
+
+var LegacyRoot = 0;
+var BlockingRoot = 1;
+var ConcurrentRoot = 2;
+
+var Scheduler_runWithPriority = Scheduler.unstable_runWithPriority,
+    Scheduler_scheduleCallback = Scheduler.unstable_scheduleCallback,
+    Scheduler_cancelCallback = Scheduler.unstable_cancelCallback,
+    Scheduler_shouldYield = Scheduler.unstable_shouldYield,
+    Scheduler_requestPaint = Scheduler.unstable_requestPaint,
+    Scheduler_now = Scheduler.unstable_now,
+    Scheduler_getCurrentPriorityLevel = Scheduler.unstable_getCurrentPriorityLevel,
+    Scheduler_ImmediatePriority = Scheduler.unstable_ImmediatePriority,
+    Scheduler_UserBlockingPriority = Scheduler.unstable_UserBlockingPriority,
+    Scheduler_NormalPriority = Scheduler.unstable_NormalPriority,
+    Scheduler_LowPriority = Scheduler.unstable_LowPriority,
+    Scheduler_IdlePriority = Scheduler.unstable_IdlePriority;
+
+{
+  // Provide explicit error message when production+profiling bundle of e.g.
+  // react-dom is used with production (non-profiling) bundle of
+  // scheduler/tracing
+  if (!(tracing.__interactionsRef != null && tracing.__interactionsRef.current != null)) {
+    {
+      throw Error( "It is not supported to run the profiling version of a renderer (for example, `react-dom/profiling`) without also replacing the `scheduler/tracing` module with `scheduler/tracing-profiling`. Your bundler might have a setting for aliasing both modules. Learn more at http://fb.me/react-profiling" );
+    }
+  }
+}
+
+var fakeCallbackNode = {}; // Except for NoPriority, these correspond to Scheduler priorities. We use
+// ascending numbers so we can compare them like numbers. They start at 90 to
+// avoid clashing with Scheduler's priorities.
+
+var ImmediatePriority = 99;
+var UserBlockingPriority$1 = 98;
+var NormalPriority = 97;
+var LowPriority = 96;
+var IdlePriority = 95; // NoPriority is the absence of priority. Also React-only.
+
+var NoPriority = 90;
+var shouldYield = Scheduler_shouldYield;
+var requestPaint = // Fall back gracefully if we're running an older version of Scheduler.
+Scheduler_requestPaint !== undefined ? Scheduler_requestPaint : function () {};
+var syncQueue = null;
+var immediateQueueCallbackNode = null;
+var isFlushingSyncQueue = false;
+var initialTimeMs = Scheduler_now(); // If the initial timestamp is reasonably small, use Scheduler's `now` directly.
+// This will be the case for modern browsers that support `performance.now`. In
+// older browsers, Scheduler falls back to `Date.now`, wh
