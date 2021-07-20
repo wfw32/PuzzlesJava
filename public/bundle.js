@@ -57518,4 +57518,303 @@ var immediateQueueCallbackNode = null;
 var isFlushingSyncQueue = false;
 var initialTimeMs = Scheduler_now(); // If the initial timestamp is reasonably small, use Scheduler's `now` directly.
 // This will be the case for modern browsers that support `performance.now`. In
-// older browsers, Scheduler falls back to `Date.now`, wh
+// older browsers, Scheduler falls back to `Date.now`, which returns a Unix
+// timestamp. In that case, subtract the module initialization time to simulate
+// the behavior of performance.now and keep our times small enough to fit
+// within 32 bits.
+// TODO: Consider lifting this into Scheduler.
+
+var now = initialTimeMs < 10000 ? Scheduler_now : function () {
+  return Scheduler_now() - initialTimeMs;
+};
+function getCurrentPriorityLevel() {
+  switch (Scheduler_getCurrentPriorityLevel()) {
+    case Scheduler_ImmediatePriority:
+      return ImmediatePriority;
+
+    case Scheduler_UserBlockingPriority:
+      return UserBlockingPriority$1;
+
+    case Scheduler_NormalPriority:
+      return NormalPriority;
+
+    case Scheduler_LowPriority:
+      return LowPriority;
+
+    case Scheduler_IdlePriority:
+      return IdlePriority;
+
+    default:
+      {
+        {
+          throw Error( "Unknown priority level." );
+        }
+      }
+
+  }
+}
+
+function reactPriorityToSchedulerPriority(reactPriorityLevel) {
+  switch (reactPriorityLevel) {
+    case ImmediatePriority:
+      return Scheduler_ImmediatePriority;
+
+    case UserBlockingPriority$1:
+      return Scheduler_UserBlockingPriority;
+
+    case NormalPriority:
+      return Scheduler_NormalPriority;
+
+    case LowPriority:
+      return Scheduler_LowPriority;
+
+    case IdlePriority:
+      return Scheduler_IdlePriority;
+
+    default:
+      {
+        {
+          throw Error( "Unknown priority level." );
+        }
+      }
+
+  }
+}
+
+function runWithPriority$1(reactPriorityLevel, fn) {
+  var priorityLevel = reactPriorityToSchedulerPriority(reactPriorityLevel);
+  return Scheduler_runWithPriority(priorityLevel, fn);
+}
+function scheduleCallback(reactPriorityLevel, callback, options) {
+  var priorityLevel = reactPriorityToSchedulerPriority(reactPriorityLevel);
+  return Scheduler_scheduleCallback(priorityLevel, callback, options);
+}
+function scheduleSyncCallback(callback) {
+  // Push this callback into an internal queue. We'll flush these either in
+  // the next tick, or earlier if something calls `flushSyncCallbackQueue`.
+  if (syncQueue === null) {
+    syncQueue = [callback]; // Flush the queue in the next tick, at the earliest.
+
+    immediateQueueCallbackNode = Scheduler_scheduleCallback(Scheduler_ImmediatePriority, flushSyncCallbackQueueImpl);
+  } else {
+    // Push onto existing queue. Don't need to schedule a callback because
+    // we already scheduled one when we created the queue.
+    syncQueue.push(callback);
+  }
+
+  return fakeCallbackNode;
+}
+function cancelCallback(callbackNode) {
+  if (callbackNode !== fakeCallbackNode) {
+    Scheduler_cancelCallback(callbackNode);
+  }
+}
+function flushSyncCallbackQueue() {
+  if (immediateQueueCallbackNode !== null) {
+    var node = immediateQueueCallbackNode;
+    immediateQueueCallbackNode = null;
+    Scheduler_cancelCallback(node);
+  }
+
+  flushSyncCallbackQueueImpl();
+}
+
+function flushSyncCallbackQueueImpl() {
+  if (!isFlushingSyncQueue && syncQueue !== null) {
+    // Prevent re-entrancy.
+    isFlushingSyncQueue = true;
+    var i = 0;
+
+    try {
+      var _isSync = true;
+      var queue = syncQueue;
+      runWithPriority$1(ImmediatePriority, function () {
+        for (; i < queue.length; i++) {
+          var callback = queue[i];
+
+          do {
+            callback = callback(_isSync);
+          } while (callback !== null);
+        }
+      });
+      syncQueue = null;
+    } catch (error) {
+      // If something throws, leave the remaining callbacks on the queue.
+      if (syncQueue !== null) {
+        syncQueue = syncQueue.slice(i + 1);
+      } // Resume flushing in the next tick
+
+
+      Scheduler_scheduleCallback(Scheduler_ImmediatePriority, flushSyncCallbackQueue);
+      throw error;
+    } finally {
+      isFlushingSyncQueue = false;
+    }
+  }
+}
+
+var NoMode = 0;
+var StrictMode = 1; // TODO: Remove BlockingMode and ConcurrentMode by reading from the root
+// tag instead
+
+var BlockingMode = 2;
+var ConcurrentMode = 4;
+var ProfileMode = 8;
+
+// Max 31 bit integer. The max integer size in V8 for 32-bit systems.
+// Math.pow(2, 30) - 1
+// 0b111111111111111111111111111111
+var MAX_SIGNED_31_BIT_INT = 1073741823;
+
+var NoWork = 0; // TODO: Think of a better name for Never. The key difference with Idle is that
+// Never work can be committed in an inconsistent state without tearing the UI.
+// The main example is offscreen content, like a hidden subtree. So one possible
+// name is Offscreen. However, it also includes dehydrated Suspense boundaries,
+// which are inconsistent in the sense that they haven't finished yet, but
+// aren't visibly inconsistent because the server rendered HTML matches what the
+// hydrated tree would look like.
+
+var Never = 1; // Idle is slightly higher priority than Never. It must completely finish in
+// order to be consistent.
+
+var Idle = 2; // Continuous Hydration is slightly higher than Idle and is used to increase
+// priority of hover targets.
+
+var ContinuousHydration = 3;
+var Sync = MAX_SIGNED_31_BIT_INT;
+var Batched = Sync - 1;
+var UNIT_SIZE = 10;
+var MAGIC_NUMBER_OFFSET = Batched - 1; // 1 unit of expiration time represents 10ms.
+
+function msToExpirationTime(ms) {
+  // Always subtract from the offset so that we don't clash with the magic number for NoWork.
+  return MAGIC_NUMBER_OFFSET - (ms / UNIT_SIZE | 0);
+}
+function expirationTimeToMs(expirationTime) {
+  return (MAGIC_NUMBER_OFFSET - expirationTime) * UNIT_SIZE;
+}
+
+function ceiling(num, precision) {
+  return ((num / precision | 0) + 1) * precision;
+}
+
+function computeExpirationBucket(currentTime, expirationInMs, bucketSizeMs) {
+  return MAGIC_NUMBER_OFFSET - ceiling(MAGIC_NUMBER_OFFSET - currentTime + expirationInMs / UNIT_SIZE, bucketSizeMs / UNIT_SIZE);
+} // TODO: This corresponds to Scheduler's NormalPriority, not LowPriority. Update
+// the names to reflect.
+
+
+var LOW_PRIORITY_EXPIRATION = 5000;
+var LOW_PRIORITY_BATCH_SIZE = 250;
+function computeAsyncExpiration(currentTime) {
+  return computeExpirationBucket(currentTime, LOW_PRIORITY_EXPIRATION, LOW_PRIORITY_BATCH_SIZE);
+}
+function computeSuspenseExpiration(currentTime, timeoutMs) {
+  // TODO: Should we warn if timeoutMs is lower than the normal pri expiration time?
+  return computeExpirationBucket(currentTime, timeoutMs, LOW_PRIORITY_BATCH_SIZE);
+} // We intentionally set a higher expiration time for interactive updates in
+// dev than in production.
+//
+// If the main thread is being blocked so long that you hit the expiration,
+// it's a problem that could be solved with better scheduling.
+//
+// People will be more likely to notice this and fix it with the long
+// expiration time in development.
+//
+// In production we opt for better UX at the risk of masking scheduling
+// problems, by expiring fast.
+
+var HIGH_PRIORITY_EXPIRATION =  500 ;
+var HIGH_PRIORITY_BATCH_SIZE = 100;
+function computeInteractiveExpiration(currentTime) {
+  return computeExpirationBucket(currentTime, HIGH_PRIORITY_EXPIRATION, HIGH_PRIORITY_BATCH_SIZE);
+}
+function inferPriorityFromExpirationTime(currentTime, expirationTime) {
+  if (expirationTime === Sync) {
+    return ImmediatePriority;
+  }
+
+  if (expirationTime === Never || expirationTime === Idle) {
+    return IdlePriority;
+  }
+
+  var msUntil = expirationTimeToMs(expirationTime) - expirationTimeToMs(currentTime);
+
+  if (msUntil <= 0) {
+    return ImmediatePriority;
+  }
+
+  if (msUntil <= HIGH_PRIORITY_EXPIRATION + HIGH_PRIORITY_BATCH_SIZE) {
+    return UserBlockingPriority$1;
+  }
+
+  if (msUntil <= LOW_PRIORITY_EXPIRATION + LOW_PRIORITY_BATCH_SIZE) {
+    return NormalPriority;
+  } // TODO: Handle LowPriority
+  // Assume anything lower has idle priority
+
+
+  return IdlePriority;
+}
+
+var ReactStrictModeWarnings = {
+  recordUnsafeLifecycleWarnings: function (fiber, instance) {},
+  flushPendingUnsafeLifecycleWarnings: function () {},
+  recordLegacyContextWarning: function (fiber, instance) {},
+  flushLegacyContextWarning: function () {},
+  discardPendingWarnings: function () {}
+};
+
+{
+  var findStrictRoot = function (fiber) {
+    var maybeStrictRoot = null;
+    var node = fiber;
+
+    while (node !== null) {
+      if (node.mode & StrictMode) {
+        maybeStrictRoot = node;
+      }
+
+      node = node.return;
+    }
+
+    return maybeStrictRoot;
+  };
+
+  var setToSortedString = function (set) {
+    var array = [];
+    set.forEach(function (value) {
+      array.push(value);
+    });
+    return array.sort().join(', ');
+  };
+
+  var pendingComponentWillMountWarnings = [];
+  var pendingUNSAFE_ComponentWillMountWarnings = [];
+  var pendingComponentWillReceivePropsWarnings = [];
+  var pendingUNSAFE_ComponentWillReceivePropsWarnings = [];
+  var pendingComponentWillUpdateWarnings = [];
+  var pendingUNSAFE_ComponentWillUpdateWarnings = []; // Tracks components we have already warned about.
+
+  var didWarnAboutUnsafeLifecycles = new Set();
+
+  ReactStrictModeWarnings.recordUnsafeLifecycleWarnings = function (fiber, instance) {
+    // Dedup strategy: Warn once per component.
+    if (didWarnAboutUnsafeLifecycles.has(fiber.type)) {
+      return;
+    }
+
+    if (typeof instance.componentWillMount === 'function' && // Don't warn about react-lifecycles-compat polyfilled components.
+    instance.componentWillMount.__suppressDeprecationWarning !== true) {
+      pendingComponentWillMountWarnings.push(fiber);
+    }
+
+    if (fiber.mode & StrictMode && typeof instance.UNSAFE_componentWillMount === 'function') {
+      pendingUNSAFE_ComponentWillMountWarnings.push(fiber);
+    }
+
+    if (typeof instance.componentWillReceiveProps === 'function' && instance.componentWillReceiveProps.__suppressDeprecationWarning !== true) {
+      pendingComponentWillReceivePropsWarnings.push(fiber);
+    }
+
+    if (fiber.mode & StrictMode && typeof instance.UNSAFE_componentWillReceiveProps === '
