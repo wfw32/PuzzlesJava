@@ -60222,4 +60222,290 @@ function ChildReconciler(shouldTrackSideEffects) {
       return updateTextNode(returnFiber, oldFiber, '' + newChild, expirationTime);
     }
 
-    if (typeof newChild
+    if (typeof newChild === 'object' && newChild !== null) {
+      switch (newChild.$$typeof) {
+        case REACT_ELEMENT_TYPE:
+          {
+            if (newChild.key === key) {
+              if (newChild.type === REACT_FRAGMENT_TYPE) {
+                return updateFragment(returnFiber, oldFiber, newChild.props.children, expirationTime, key);
+              }
+
+              return updateElement(returnFiber, oldFiber, newChild, expirationTime);
+            } else {
+              return null;
+            }
+          }
+
+        case REACT_PORTAL_TYPE:
+          {
+            if (newChild.key === key) {
+              return updatePortal(returnFiber, oldFiber, newChild, expirationTime);
+            } else {
+              return null;
+            }
+          }
+      }
+
+      if (isArray$1(newChild) || getIteratorFn(newChild)) {
+        if (key !== null) {
+          return null;
+        }
+
+        return updateFragment(returnFiber, oldFiber, newChild, expirationTime, null);
+      }
+
+      throwOnInvalidObjectType(returnFiber, newChild);
+    }
+
+    {
+      if (typeof newChild === 'function') {
+        warnOnFunctionType();
+      }
+    }
+
+    return null;
+  }
+
+  function updateFromMap(existingChildren, returnFiber, newIdx, newChild, expirationTime) {
+    if (typeof newChild === 'string' || typeof newChild === 'number') {
+      // Text nodes don't have keys, so we neither have to check the old nor
+      // new node for the key. If both are text nodes, they match.
+      var matchedFiber = existingChildren.get(newIdx) || null;
+      return updateTextNode(returnFiber, matchedFiber, '' + newChild, expirationTime);
+    }
+
+    if (typeof newChild === 'object' && newChild !== null) {
+      switch (newChild.$$typeof) {
+        case REACT_ELEMENT_TYPE:
+          {
+            var _matchedFiber = existingChildren.get(newChild.key === null ? newIdx : newChild.key) || null;
+
+            if (newChild.type === REACT_FRAGMENT_TYPE) {
+              return updateFragment(returnFiber, _matchedFiber, newChild.props.children, expirationTime, newChild.key);
+            }
+
+            return updateElement(returnFiber, _matchedFiber, newChild, expirationTime);
+          }
+
+        case REACT_PORTAL_TYPE:
+          {
+            var _matchedFiber2 = existingChildren.get(newChild.key === null ? newIdx : newChild.key) || null;
+
+            return updatePortal(returnFiber, _matchedFiber2, newChild, expirationTime);
+          }
+      }
+
+      if (isArray$1(newChild) || getIteratorFn(newChild)) {
+        var _matchedFiber3 = existingChildren.get(newIdx) || null;
+
+        return updateFragment(returnFiber, _matchedFiber3, newChild, expirationTime, null);
+      }
+
+      throwOnInvalidObjectType(returnFiber, newChild);
+    }
+
+    {
+      if (typeof newChild === 'function') {
+        warnOnFunctionType();
+      }
+    }
+
+    return null;
+  }
+  /**
+   * Warns if there is a duplicate or missing key
+   */
+
+
+  function warnOnInvalidKey(child, knownKeys) {
+    {
+      if (typeof child !== 'object' || child === null) {
+        return knownKeys;
+      }
+
+      switch (child.$$typeof) {
+        case REACT_ELEMENT_TYPE:
+        case REACT_PORTAL_TYPE:
+          warnForMissingKey(child);
+          var key = child.key;
+
+          if (typeof key !== 'string') {
+            break;
+          }
+
+          if (knownKeys === null) {
+            knownKeys = new Set();
+            knownKeys.add(key);
+            break;
+          }
+
+          if (!knownKeys.has(key)) {
+            knownKeys.add(key);
+            break;
+          }
+
+          error('Encountered two children with the same key, `%s`. ' + 'Keys should be unique so that components maintain their identity ' + 'across updates. Non-unique keys may cause children to be ' + 'duplicated and/or omitted — the behavior is unsupported and ' + 'could change in a future version.', key);
+
+          break;
+      }
+    }
+
+    return knownKeys;
+  }
+
+  function reconcileChildrenArray(returnFiber, currentFirstChild, newChildren, expirationTime) {
+    // This algorithm can't optimize by searching from both ends since we
+    // don't have backpointers on fibers. I'm trying to see how far we can get
+    // with that model. If it ends up not being worth the tradeoffs, we can
+    // add it later.
+    // Even with a two ended optimization, we'd want to optimize for the case
+    // where there are few changes and brute force the comparison instead of
+    // going for the Map. It'd like to explore hitting that path first in
+    // forward-only mode and only go for the Map once we notice that we need
+    // lots of look ahead. This doesn't handle reversal as well as two ended
+    // search but that's unusual. Besides, for the two ended optimization to
+    // work on Iterables, we'd need to copy the whole set.
+    // In this first iteration, we'll just live with hitting the bad case
+    // (adding everything to a Map) in for every insert/move.
+    // If you change this code, also update reconcileChildrenIterator() which
+    // uses the same algorithm.
+    {
+      // First, validate keys.
+      var knownKeys = null;
+
+      for (var i = 0; i < newChildren.length; i++) {
+        var child = newChildren[i];
+        knownKeys = warnOnInvalidKey(child, knownKeys);
+      }
+    }
+
+    var resultingFirstChild = null;
+    var previousNewFiber = null;
+    var oldFiber = currentFirstChild;
+    var lastPlacedIndex = 0;
+    var newIdx = 0;
+    var nextOldFiber = null;
+
+    for (; oldFiber !== null && newIdx < newChildren.length; newIdx++) {
+      if (oldFiber.index > newIdx) {
+        nextOldFiber = oldFiber;
+        oldFiber = null;
+      } else {
+        nextOldFiber = oldFiber.sibling;
+      }
+
+      var newFiber = updateSlot(returnFiber, oldFiber, newChildren[newIdx], expirationTime);
+
+      if (newFiber === null) {
+        // TODO: This breaks on empty slots like null children. That's
+        // unfortunate because it triggers the slow path all the time. We need
+        // a better way to communicate whether this was a miss or null,
+        // boolean, undefined, etc.
+        if (oldFiber === null) {
+          oldFiber = nextOldFiber;
+        }
+
+        break;
+      }
+
+      if (shouldTrackSideEffects) {
+        if (oldFiber && newFiber.alternate === null) {
+          // We matched the slot, but we didn't reuse the existing fiber, so we
+          // need to delete the existing child.
+          deleteChild(returnFiber, oldFiber);
+        }
+      }
+
+      lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+
+      if (previousNewFiber === null) {
+        // TODO: Move out of the loop. This only happens for the first run.
+        resultingFirstChild = newFiber;
+      } else {
+        // TODO: Defer siblings if we're not at the right index for this slot.
+        // I.e. if we had null values before, then we want to defer this
+        // for each null value. However, we also don't want to call updateSlot
+        // with the previous one.
+        previousNewFiber.sibling = newFiber;
+      }
+
+      previousNewFiber = newFiber;
+      oldFiber = nextOldFiber;
+    }
+
+    if (newIdx === newChildren.length) {
+      // We've reached the end of the new children. We can delete the rest.
+      deleteRemainingChildren(returnFiber, oldFiber);
+      return resultingFirstChild;
+    }
+
+    if (oldFiber === null) {
+      // If we don't have any more existing children we can choose a fast path
+      // since the rest will all be insertions.
+      for (; newIdx < newChildren.length; newIdx++) {
+        var _newFiber = createChild(returnFiber, newChildren[newIdx], expirationTime);
+
+        if (_newFiber === null) {
+          continue;
+        }
+
+        lastPlacedIndex = placeChild(_newFiber, lastPlacedIndex, newIdx);
+
+        if (previousNewFiber === null) {
+          // TODO: Move out of the loop. This only happens for the first run.
+          resultingFirstChild = _newFiber;
+        } else {
+          previousNewFiber.sibling = _newFiber;
+        }
+
+        previousNewFiber = _newFiber;
+      }
+
+      return resultingFirstChild;
+    } // Add all children to a key map for quick lookups.
+
+
+    var existingChildren = mapRemainingChildren(returnFiber, oldFiber); // Keep scanning and use the map to restore deleted items as moves.
+
+    for (; newIdx < newChildren.length; newIdx++) {
+      var _newFiber2 = updateFromMap(existingChildren, returnFiber, newIdx, newChildren[newIdx], expirationTime);
+
+      if (_newFiber2 !== null) {
+        if (shouldTrackSideEffects) {
+          if (_newFiber2.alternate !== null) {
+            // The new fiber is a work in progress, but if there exists a
+            // current, that means that we reused the fiber. We need to delete
+            // it from the child list so that we don't add it to the deletion
+            // list.
+            existingChildren.delete(_newFiber2.key === null ? newIdx : _newFiber2.key);
+          }
+        }
+
+        lastPlacedIndex = placeChild(_newFiber2, lastPlacedIndex, newIdx);
+
+        if (previousNewFiber === null) {
+          resultingFirstChild = _newFiber2;
+        } else {
+          previousNewFiber.sibling = _newFiber2;
+        }
+
+        previousNewFiber = _newFiber2;
+      }
+    }
+
+    if (shouldTrackSideEffects) {
+      // Any existing children that weren't consumed above were deleted. We need
+      // to add them to the deletion list.
+      existingChildren.forEach(function (child) {
+        return deleteChild(returnFiber, child);
+      });
+    }
+
+    return resultingFirstChild;
+  }
+
+  function reconcileChildrenIterator(returnFiber, currentFirstChild, newChildrenIterable, expirationTime) {
+    // This is the same implementation as reconcileChildrenArray(),
+    // but using the iterator instead.
+    var i
