@@ -60508,4 +60508,287 @@ function ChildReconciler(shouldTrackSideEffects) {
   function reconcileChildrenIterator(returnFiber, currentFirstChild, newChildrenIterable, expirationTime) {
     // This is the same implementation as reconcileChildrenArray(),
     // but using the iterator instead.
-    var i
+    var iteratorFn = getIteratorFn(newChildrenIterable);
+
+    if (!(typeof iteratorFn === 'function')) {
+      {
+        throw Error( "An object is not an iterable. This error is likely caused by a bug in React. Please file an issue." );
+      }
+    }
+
+    {
+      // We don't support rendering Generators because it's a mutation.
+      // See https://github.com/facebook/react/issues/12995
+      if (typeof Symbol === 'function' && // $FlowFixMe Flow doesn't know about toStringTag
+      newChildrenIterable[Symbol.toStringTag] === 'Generator') {
+        if (!didWarnAboutGenerators) {
+          error('Using Generators as children is unsupported and will likely yield ' + 'unexpected results because enumerating a generator mutates it. ' + 'You may convert it to an array with `Array.from()` or the ' + '`[...spread]` operator before rendering. Keep in mind ' + 'you might need to polyfill these features for older browsers.');
+        }
+
+        didWarnAboutGenerators = true;
+      } // Warn about using Maps as children
+
+
+      if (newChildrenIterable.entries === iteratorFn) {
+        if (!didWarnAboutMaps) {
+          error('Using Maps as children is unsupported and will likely yield ' + 'unexpected results. Convert it to a sequence/iterable of keyed ' + 'ReactElements instead.');
+        }
+
+        didWarnAboutMaps = true;
+      } // First, validate keys.
+      // We'll get a different iterator later for the main pass.
+
+
+      var _newChildren = iteratorFn.call(newChildrenIterable);
+
+      if (_newChildren) {
+        var knownKeys = null;
+
+        var _step = _newChildren.next();
+
+        for (; !_step.done; _step = _newChildren.next()) {
+          var child = _step.value;
+          knownKeys = warnOnInvalidKey(child, knownKeys);
+        }
+      }
+    }
+
+    var newChildren = iteratorFn.call(newChildrenIterable);
+
+    if (!(newChildren != null)) {
+      {
+        throw Error( "An iterable object provided no iterator." );
+      }
+    }
+
+    var resultingFirstChild = null;
+    var previousNewFiber = null;
+    var oldFiber = currentFirstChild;
+    var lastPlacedIndex = 0;
+    var newIdx = 0;
+    var nextOldFiber = null;
+    var step = newChildren.next();
+
+    for (; oldFiber !== null && !step.done; newIdx++, step = newChildren.next()) {
+      if (oldFiber.index > newIdx) {
+        nextOldFiber = oldFiber;
+        oldFiber = null;
+      } else {
+        nextOldFiber = oldFiber.sibling;
+      }
+
+      var newFiber = updateSlot(returnFiber, oldFiber, step.value, expirationTime);
+
+      if (newFiber === null) {
+        // TODO: This breaks on empty slots like null children. That's
+        // unfortunate because it triggers the slow path all the time. We need
+        // a better way to communicate whether this was a miss or null,
+        // boolean, undefined, etc.
+        if (oldFiber === null) {
+          oldFiber = nextOldFiber;
+        }
+
+        break;
+      }
+
+      if (shouldTrackSideEffects) {
+        if (oldFiber && newFiber.alternate === null) {
+          // We matched the slot, but we didn't reuse the existing fiber, so we
+          // need to delete the existing child.
+          deleteChild(returnFiber, oldFiber);
+        }
+      }
+
+      lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+
+      if (previousNewFiber === null) {
+        // TODO: Move out of the loop. This only happens for the first run.
+        resultingFirstChild = newFiber;
+      } else {
+        // TODO: Defer siblings if we're not at the right index for this slot.
+        // I.e. if we had null values before, then we want to defer this
+        // for each null value. However, we also don't want to call updateSlot
+        // with the previous one.
+        previousNewFiber.sibling = newFiber;
+      }
+
+      previousNewFiber = newFiber;
+      oldFiber = nextOldFiber;
+    }
+
+    if (step.done) {
+      // We've reached the end of the new children. We can delete the rest.
+      deleteRemainingChildren(returnFiber, oldFiber);
+      return resultingFirstChild;
+    }
+
+    if (oldFiber === null) {
+      // If we don't have any more existing children we can choose a fast path
+      // since the rest will all be insertions.
+      for (; !step.done; newIdx++, step = newChildren.next()) {
+        var _newFiber3 = createChild(returnFiber, step.value, expirationTime);
+
+        if (_newFiber3 === null) {
+          continue;
+        }
+
+        lastPlacedIndex = placeChild(_newFiber3, lastPlacedIndex, newIdx);
+
+        if (previousNewFiber === null) {
+          // TODO: Move out of the loop. This only happens for the first run.
+          resultingFirstChild = _newFiber3;
+        } else {
+          previousNewFiber.sibling = _newFiber3;
+        }
+
+        previousNewFiber = _newFiber3;
+      }
+
+      return resultingFirstChild;
+    } // Add all children to a key map for quick lookups.
+
+
+    var existingChildren = mapRemainingChildren(returnFiber, oldFiber); // Keep scanning and use the map to restore deleted items as moves.
+
+    for (; !step.done; newIdx++, step = newChildren.next()) {
+      var _newFiber4 = updateFromMap(existingChildren, returnFiber, newIdx, step.value, expirationTime);
+
+      if (_newFiber4 !== null) {
+        if (shouldTrackSideEffects) {
+          if (_newFiber4.alternate !== null) {
+            // The new fiber is a work in progress, but if there exists a
+            // current, that means that we reused the fiber. We need to delete
+            // it from the child list so that we don't add it to the deletion
+            // list.
+            existingChildren.delete(_newFiber4.key === null ? newIdx : _newFiber4.key);
+          }
+        }
+
+        lastPlacedIndex = placeChild(_newFiber4, lastPlacedIndex, newIdx);
+
+        if (previousNewFiber === null) {
+          resultingFirstChild = _newFiber4;
+        } else {
+          previousNewFiber.sibling = _newFiber4;
+        }
+
+        previousNewFiber = _newFiber4;
+      }
+    }
+
+    if (shouldTrackSideEffects) {
+      // Any existing children that weren't consumed above were deleted. We need
+      // to add them to the deletion list.
+      existingChildren.forEach(function (child) {
+        return deleteChild(returnFiber, child);
+      });
+    }
+
+    return resultingFirstChild;
+  }
+
+  function reconcileSingleTextNode(returnFiber, currentFirstChild, textContent, expirationTime) {
+    // There's no need to check for keys on text nodes since we don't have a
+    // way to define them.
+    if (currentFirstChild !== null && currentFirstChild.tag === HostText) {
+      // We already have an existing node so let's just update it and delete
+      // the rest.
+      deleteRemainingChildren(returnFiber, currentFirstChild.sibling);
+      var existing = useFiber(currentFirstChild, textContent);
+      existing.return = returnFiber;
+      return existing;
+    } // The existing first child is not a text node so we need to create one
+    // and delete the existing ones.
+
+
+    deleteRemainingChildren(returnFiber, currentFirstChild);
+    var created = createFiberFromText(textContent, returnFiber.mode, expirationTime);
+    created.return = returnFiber;
+    return created;
+  }
+
+  function reconcileSingleElement(returnFiber, currentFirstChild, element, expirationTime) {
+    var key = element.key;
+    var child = currentFirstChild;
+
+    while (child !== null) {
+      // TODO: If key === null and child.key === null, then this only applies to
+      // the first item in the list.
+      if (child.key === key) {
+        switch (child.tag) {
+          case Fragment:
+            {
+              if (element.type === REACT_FRAGMENT_TYPE) {
+                deleteRemainingChildren(returnFiber, child.sibling);
+                var existing = useFiber(child, element.props.children);
+                existing.return = returnFiber;
+
+                {
+                  existing._debugSource = element._source;
+                  existing._debugOwner = element._owner;
+                }
+
+                return existing;
+              }
+
+              break;
+            }
+
+          case Block:
+
+          // We intentionally fallthrough here if enableBlocksAPI is not on.
+          // eslint-disable-next-lined no-fallthrough
+
+          default:
+            {
+              if (child.elementType === element.type || ( // Keep this check inline so it only runs on the false path:
+               isCompatibleFamilyForHotReloading(child, element) )) {
+                deleteRemainingChildren(returnFiber, child.sibling);
+
+                var _existing3 = useFiber(child, element.props);
+
+                _existing3.ref = coerceRef(returnFiber, child, element);
+                _existing3.return = returnFiber;
+
+                {
+                  _existing3._debugSource = element._source;
+                  _existing3._debugOwner = element._owner;
+                }
+
+                return _existing3;
+              }
+
+              break;
+            }
+        } // Didn't match.
+
+
+        deleteRemainingChildren(returnFiber, child);
+        break;
+      } else {
+        deleteChild(returnFiber, child);
+      }
+
+      child = child.sibling;
+    }
+
+    if (element.type === REACT_FRAGMENT_TYPE) {
+      var created = createFiberFromFragment(element.props.children, returnFiber.mode, expirationTime, element.key);
+      created.return = returnFiber;
+      return created;
+    } else {
+      var _created4 = createFiberFromElement(element, returnFiber.mode, expirationTime);
+
+      _created4.ref = coerceRef(returnFiber, currentFirstChild, element);
+      _created4.return = returnFiber;
+      return _created4;
+    }
+  }
+
+  function reconcileSinglePortal(returnFiber, currentFirstChild, portal, expirationTime) {
+    var key = portal.key;
+    var child = currentFirstChild;
+
+    while (child !== null) {
+      // TODO: If key === null and child.key === null, then this only applies to
+      // the f
