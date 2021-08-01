@@ -61059,4 +61059,288 @@ function popSuspenseContext(fiber) {
 function shouldCaptureSuspense(workInProgress, hasInvisibleParent) {
   // If it was the primary children that just suspended, capture and render the
   // fallback. Otherwise, don't capture and bubble to the next boundary.
-  var nextState 
+  var nextState = workInProgress.memoizedState;
+
+  if (nextState !== null) {
+    if (nextState.dehydrated !== null) {
+      // A dehydrated boundary always captures.
+      return true;
+    }
+
+    return false;
+  }
+
+  var props = workInProgress.memoizedProps; // In order to capture, the Suspense component must have a fallback prop.
+
+  if (props.fallback === undefined) {
+    return false;
+  } // Regular boundaries always capture.
+
+
+  if (props.unstable_avoidThisFallback !== true) {
+    return true;
+  } // If it's a boundary we should avoid, then we prefer to bubble up to the
+  // parent boundary if it is currently invisible.
+
+
+  if (hasInvisibleParent) {
+    return false;
+  } // If the parent is not able to handle it, we must handle it.
+
+
+  return true;
+}
+function findFirstSuspended(row) {
+  var node = row;
+
+  while (node !== null) {
+    if (node.tag === SuspenseComponent) {
+      var state = node.memoizedState;
+
+      if (state !== null) {
+        var dehydrated = state.dehydrated;
+
+        if (dehydrated === null || isSuspenseInstancePending(dehydrated) || isSuspenseInstanceFallback(dehydrated)) {
+          return node;
+        }
+      }
+    } else if (node.tag === SuspenseListComponent && // revealOrder undefined can't be trusted because it don't
+    // keep track of whether it suspended or not.
+    node.memoizedProps.revealOrder !== undefined) {
+      var didSuspend = (node.effectTag & DidCapture) !== NoEffect;
+
+      if (didSuspend) {
+        return node;
+      }
+    } else if (node.child !== null) {
+      node.child.return = node;
+      node = node.child;
+      continue;
+    }
+
+    if (node === row) {
+      return null;
+    }
+
+    while (node.sibling === null) {
+      if (node.return === null || node.return === row) {
+        return null;
+      }
+
+      node = node.return;
+    }
+
+    node.sibling.return = node.return;
+    node = node.sibling;
+  }
+
+  return null;
+}
+
+function createDeprecatedResponderListener(responder, props) {
+  var eventResponderListener = {
+    responder: responder,
+    props: props
+  };
+
+  {
+    Object.freeze(eventResponderListener);
+  }
+
+  return eventResponderListener;
+}
+
+var HasEffect =
+/* */
+1; // Represents the phase in which the effect (not the clean-up) fires.
+
+var Layout =
+/*    */
+2;
+var Passive$1 =
+/*   */
+4;
+
+var ReactCurrentDispatcher = ReactSharedInternals.ReactCurrentDispatcher,
+    ReactCurrentBatchConfig$1 = ReactSharedInternals.ReactCurrentBatchConfig;
+var didWarnAboutMismatchedHooksForComponent;
+
+{
+  didWarnAboutMismatchedHooksForComponent = new Set();
+}
+
+// These are set right before calling the component.
+var renderExpirationTime = NoWork; // The work-in-progress fiber. I've named it differently to distinguish it from
+// the work-in-progress hook.
+
+var currentlyRenderingFiber$1 = null; // Hooks are stored as a linked list on the fiber's memoizedState field. The
+// current hook list is the list that belongs to the current fiber. The
+// work-in-progress hook list is a new list that will be added to the
+// work-in-progress fiber.
+
+var currentHook = null;
+var workInProgressHook = null; // Whether an update was scheduled at any point during the render phase. This
+// does not get reset if we do another render pass; only when we're completely
+// finished evaluating this component. This is an optimization so we know
+// whether we need to clear render phase updates after a throw.
+
+var didScheduleRenderPhaseUpdate = false;
+var RE_RENDER_LIMIT = 25; // In DEV, this is the name of the currently executing primitive hook
+
+var currentHookNameInDev = null; // In DEV, this list ensures that hooks are called in the same order between renders.
+// The list stores the order of hooks used during the initial render (mount).
+// Subsequent renders (updates) reference this list.
+
+var hookTypesDev = null;
+var hookTypesUpdateIndexDev = -1; // In DEV, this tracks whether currently rendering component needs to ignore
+// the dependencies for Hooks that need them (e.g. useEffect or useMemo).
+// When true, such Hooks will always be "remounted". Only used during hot reload.
+
+var ignorePreviousDependencies = false;
+
+function mountHookTypesDev() {
+  {
+    var hookName = currentHookNameInDev;
+
+    if (hookTypesDev === null) {
+      hookTypesDev = [hookName];
+    } else {
+      hookTypesDev.push(hookName);
+    }
+  }
+}
+
+function updateHookTypesDev() {
+  {
+    var hookName = currentHookNameInDev;
+
+    if (hookTypesDev !== null) {
+      hookTypesUpdateIndexDev++;
+
+      if (hookTypesDev[hookTypesUpdateIndexDev] !== hookName) {
+        warnOnHookMismatchInDev(hookName);
+      }
+    }
+  }
+}
+
+function checkDepsAreArrayDev(deps) {
+  {
+    if (deps !== undefined && deps !== null && !Array.isArray(deps)) {
+      // Verify deps, but only on mount to avoid extra checks.
+      // It's unlikely their type would change as usually you define them inline.
+      error('%s received a final argument that is not an array (instead, received `%s`). When ' + 'specified, the final argument must be an array.', currentHookNameInDev, typeof deps);
+    }
+  }
+}
+
+function warnOnHookMismatchInDev(currentHookName) {
+  {
+    var componentName = getComponentName(currentlyRenderingFiber$1.type);
+
+    if (!didWarnAboutMismatchedHooksForComponent.has(componentName)) {
+      didWarnAboutMismatchedHooksForComponent.add(componentName);
+
+      if (hookTypesDev !== null) {
+        var table = '';
+        var secondColumnStart = 30;
+
+        for (var i = 0; i <= hookTypesUpdateIndexDev; i++) {
+          var oldHookName = hookTypesDev[i];
+          var newHookName = i === hookTypesUpdateIndexDev ? currentHookName : oldHookName;
+          var row = i + 1 + ". " + oldHookName; // Extra space so second column lines up
+          // lol @ IE not supporting String#repeat
+
+          while (row.length < secondColumnStart) {
+            row += ' ';
+          }
+
+          row += newHookName + '\n';
+          table += row;
+        }
+
+        error('React has detected a change in the order of Hooks called by %s. ' + 'This will lead to bugs and errors if not fixed. ' + 'For more information, read the Rules of Hooks: https://fb.me/rules-of-hooks\n\n' + '   Previous render            Next render\n' + '   ------------------------------------------------------\n' + '%s' + '   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n', componentName, table);
+      }
+    }
+  }
+}
+
+function throwInvalidHookError() {
+  {
+    {
+      throw Error( "Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:\n1. You might have mismatching versions of React and the renderer (such as React DOM)\n2. You might be breaking the Rules of Hooks\n3. You might have more than one copy of React in the same app\nSee https://fb.me/react-invalid-hook-call for tips about how to debug and fix this problem." );
+    }
+  }
+}
+
+function areHookInputsEqual(nextDeps, prevDeps) {
+  {
+    if (ignorePreviousDependencies) {
+      // Only true when this component is being hot reloaded.
+      return false;
+    }
+  }
+
+  if (prevDeps === null) {
+    {
+      error('%s received a final argument during this render, but not during ' + 'the previous render. Even though the final argument is optional, ' + 'its type cannot change between renders.', currentHookNameInDev);
+    }
+
+    return false;
+  }
+
+  {
+    // Don't bother comparing lengths in prod because these arrays should be
+    // passed inline.
+    if (nextDeps.length !== prevDeps.length) {
+      error('The final argument passed to %s changed size between renders. The ' + 'order and size of this array must remain constant.\n\n' + 'Previous: %s\n' + 'Incoming: %s', currentHookNameInDev, "[" + prevDeps.join(', ') + "]", "[" + nextDeps.join(', ') + "]");
+    }
+  }
+
+  for (var i = 0; i < prevDeps.length && i < nextDeps.length; i++) {
+    if (objectIs(nextDeps[i], prevDeps[i])) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+function renderWithHooks(current, workInProgress, Component, props, secondArg, nextRenderExpirationTime) {
+  renderExpirationTime = nextRenderExpirationTime;
+  currentlyRenderingFiber$1 = workInProgress;
+
+  {
+    hookTypesDev = current !== null ? current._debugHookTypes : null;
+    hookTypesUpdateIndexDev = -1; // Used for hot reloading:
+
+    ignorePreviousDependencies = current !== null && current.type !== workInProgress.type;
+  }
+
+  workInProgress.memoizedState = null;
+  workInProgress.updateQueue = null;
+  workInProgress.expirationTime = NoWork; // The following should have already been reset
+  // currentHook = null;
+  // workInProgressHook = null;
+  // didScheduleRenderPhaseUpdate = false;
+  // TODO Warn if no hooks are used at all during mount, then some are used during update.
+  // Currently we will identify the update render as a mount because memoizedState === null.
+  // This is tricky because it's valid for certain types of components (e.g. React.lazy)
+  // Using memoizedState to differentiate between mount/update only works if at least one stateful hook is used.
+  // Non-stateful hooks (e.g. context) don't get added to memoizedState,
+  // so memoizedState would be null during updates and mounts.
+
+  {
+    if (current !== null && current.memoizedState !== null) {
+      ReactCurrentDispatcher.current = HooksDispatcherOnUpdateInDEV;
+    } else if (hookTypesDev !== null) {
+      // This dispatcher handles an edge case where a component is updating,
+      // but no stateful hooks have been used.
+      // We want to match the production code behavior (which will use HooksDispatcherOnMount),
+      // but with the extra DEV validation to ensure hooks ordering hasn't changed.
+      // This dispatcher does that.
+      ReactCurrentDispatcher.current = HooksDispatcherOnMountWithHookTypesInDEV;
+    } else {
+      ReactCur
