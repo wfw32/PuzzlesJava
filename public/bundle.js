@@ -60791,4 +60791,272 @@ function ChildReconciler(shouldTrackSideEffects) {
 
     while (child !== null) {
       // TODO: If key === null and child.key === null, then this only applies to
-      // the f
+      // the first item in the list.
+      if (child.key === key) {
+        if (child.tag === HostPortal && child.stateNode.containerInfo === portal.containerInfo && child.stateNode.implementation === portal.implementation) {
+          deleteRemainingChildren(returnFiber, child.sibling);
+          var existing = useFiber(child, portal.children || []);
+          existing.return = returnFiber;
+          return existing;
+        } else {
+          deleteRemainingChildren(returnFiber, child);
+          break;
+        }
+      } else {
+        deleteChild(returnFiber, child);
+      }
+
+      child = child.sibling;
+    }
+
+    var created = createFiberFromPortal(portal, returnFiber.mode, expirationTime);
+    created.return = returnFiber;
+    return created;
+  } // This API will tag the children with the side-effect of the reconciliation
+  // itself. They will be added to the side-effect list as we pass through the
+  // children and the parent.
+
+
+  function reconcileChildFibers(returnFiber, currentFirstChild, newChild, expirationTime) {
+    // This function is not recursive.
+    // If the top level item is an array, we treat it as a set of children,
+    // not as a fragment. Nested arrays on the other hand will be treated as
+    // fragment nodes. Recursion happens at the normal flow.
+    // Handle top level unkeyed fragments as if they were arrays.
+    // This leads to an ambiguity between <>{[...]}</> and <>...</>.
+    // We treat the ambiguous cases above the same.
+    var isUnkeyedTopLevelFragment = typeof newChild === 'object' && newChild !== null && newChild.type === REACT_FRAGMENT_TYPE && newChild.key === null;
+
+    if (isUnkeyedTopLevelFragment) {
+      newChild = newChild.props.children;
+    } // Handle object types
+
+
+    var isObject = typeof newChild === 'object' && newChild !== null;
+
+    if (isObject) {
+      switch (newChild.$$typeof) {
+        case REACT_ELEMENT_TYPE:
+          return placeSingleChild(reconcileSingleElement(returnFiber, currentFirstChild, newChild, expirationTime));
+
+        case REACT_PORTAL_TYPE:
+          return placeSingleChild(reconcileSinglePortal(returnFiber, currentFirstChild, newChild, expirationTime));
+      }
+    }
+
+    if (typeof newChild === 'string' || typeof newChild === 'number') {
+      return placeSingleChild(reconcileSingleTextNode(returnFiber, currentFirstChild, '' + newChild, expirationTime));
+    }
+
+    if (isArray$1(newChild)) {
+      return reconcileChildrenArray(returnFiber, currentFirstChild, newChild, expirationTime);
+    }
+
+    if (getIteratorFn(newChild)) {
+      return reconcileChildrenIterator(returnFiber, currentFirstChild, newChild, expirationTime);
+    }
+
+    if (isObject) {
+      throwOnInvalidObjectType(returnFiber, newChild);
+    }
+
+    {
+      if (typeof newChild === 'function') {
+        warnOnFunctionType();
+      }
+    }
+
+    if (typeof newChild === 'undefined' && !isUnkeyedTopLevelFragment) {
+      // If the new child is undefined, and the return fiber is a composite
+      // component, throw an error. If Fiber return types are disabled,
+      // we already threw above.
+      switch (returnFiber.tag) {
+        case ClassComponent:
+          {
+            {
+              var instance = returnFiber.stateNode;
+
+              if (instance.render._isMockFunction) {
+                // We allow auto-mocks to proceed as if they're returning null.
+                break;
+              }
+            }
+          }
+        // Intentionally fall through to the next case, which handles both
+        // functions and classes
+        // eslint-disable-next-lined no-fallthrough
+
+        case FunctionComponent:
+          {
+            var Component = returnFiber.type;
+
+            {
+              {
+                throw Error( (Component.displayName || Component.name || 'Component') + "(...): Nothing was returned from render. This usually means a return statement is missing. Or, to render nothing, return null." );
+              }
+            }
+          }
+      }
+    } // Remaining cases are all treated as empty.
+
+
+    return deleteRemainingChildren(returnFiber, currentFirstChild);
+  }
+
+  return reconcileChildFibers;
+}
+
+var reconcileChildFibers = ChildReconciler(true);
+var mountChildFibers = ChildReconciler(false);
+function cloneChildFibers(current, workInProgress) {
+  if (!(current === null || workInProgress.child === current.child)) {
+    {
+      throw Error( "Resuming work not yet implemented." );
+    }
+  }
+
+  if (workInProgress.child === null) {
+    return;
+  }
+
+  var currentChild = workInProgress.child;
+  var newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
+  workInProgress.child = newChild;
+  newChild.return = workInProgress;
+
+  while (currentChild.sibling !== null) {
+    currentChild = currentChild.sibling;
+    newChild = newChild.sibling = createWorkInProgress(currentChild, currentChild.pendingProps);
+    newChild.return = workInProgress;
+  }
+
+  newChild.sibling = null;
+} // Reset a workInProgress child set to prepare it for a second pass.
+
+function resetChildFibers(workInProgress, renderExpirationTime) {
+  var child = workInProgress.child;
+
+  while (child !== null) {
+    resetWorkInProgress(child, renderExpirationTime);
+    child = child.sibling;
+  }
+}
+
+var NO_CONTEXT = {};
+var contextStackCursor$1 = createCursor(NO_CONTEXT);
+var contextFiberStackCursor = createCursor(NO_CONTEXT);
+var rootInstanceStackCursor = createCursor(NO_CONTEXT);
+
+function requiredContext(c) {
+  if (!(c !== NO_CONTEXT)) {
+    {
+      throw Error( "Expected host context to exist. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+
+  return c;
+}
+
+function getRootHostContainer() {
+  var rootInstance = requiredContext(rootInstanceStackCursor.current);
+  return rootInstance;
+}
+
+function pushHostContainer(fiber, nextRootInstance) {
+  // Push current root instance onto the stack;
+  // This allows us to reset root when portals are popped.
+  push(rootInstanceStackCursor, nextRootInstance, fiber); // Track the context and the Fiber that provided it.
+  // This enables us to pop only Fibers that provide unique contexts.
+
+  push(contextFiberStackCursor, fiber, fiber); // Finally, we need to push the host context to the stack.
+  // However, we can't just call getRootHostContext() and push it because
+  // we'd have a different number of entries on the stack depending on
+  // whether getRootHostContext() throws somewhere in renderer code or not.
+  // So we push an empty value first. This lets us safely unwind on errors.
+
+  push(contextStackCursor$1, NO_CONTEXT, fiber);
+  var nextRootContext = getRootHostContext(nextRootInstance); // Now that we know this function doesn't throw, replace it.
+
+  pop(contextStackCursor$1, fiber);
+  push(contextStackCursor$1, nextRootContext, fiber);
+}
+
+function popHostContainer(fiber) {
+  pop(contextStackCursor$1, fiber);
+  pop(contextFiberStackCursor, fiber);
+  pop(rootInstanceStackCursor, fiber);
+}
+
+function getHostContext() {
+  var context = requiredContext(contextStackCursor$1.current);
+  return context;
+}
+
+function pushHostContext(fiber) {
+  var rootInstance = requiredContext(rootInstanceStackCursor.current);
+  var context = requiredContext(contextStackCursor$1.current);
+  var nextContext = getChildHostContext(context, fiber.type); // Don't push this Fiber's context unless it's unique.
+
+  if (context === nextContext) {
+    return;
+  } // Track the context and the Fiber that provided it.
+  // This enables us to pop only Fibers that provide unique contexts.
+
+
+  push(contextFiberStackCursor, fiber, fiber);
+  push(contextStackCursor$1, nextContext, fiber);
+}
+
+function popHostContext(fiber) {
+  // Do not pop unless this Fiber provided the current context.
+  // pushHostContext() only pushes Fibers that provide unique contexts.
+  if (contextFiberStackCursor.current !== fiber) {
+    return;
+  }
+
+  pop(contextStackCursor$1, fiber);
+  pop(contextFiberStackCursor, fiber);
+}
+
+var DefaultSuspenseContext = 0; // The Suspense Context is split into two parts. The lower bits is
+// inherited deeply down the subtree. The upper bits only affect
+// this immediate suspense boundary and gets reset each new
+// boundary or suspense list.
+
+var SubtreeSuspenseContextMask = 1; // Subtree Flags:
+// InvisibleParentSuspenseContext indicates that one of our parent Suspense
+// boundaries is not currently showing visible main content.
+// Either because it is already showing a fallback or is not mounted at all.
+// We can use this to determine if it is desirable to trigger a fallback at
+// the parent. If not, then we might need to trigger undesirable boundaries
+// and/or suspend the commit to avoid hiding the parent content.
+
+var InvisibleParentSuspenseContext = 1; // Shallow Flags:
+// ForceSuspenseFallback can be used by SuspenseList to force newly added
+// items into their fallback state during one of the render passes.
+
+var ForceSuspenseFallback = 2;
+var suspenseStackCursor = createCursor(DefaultSuspenseContext);
+function hasSuspenseContext(parentContext, flag) {
+  return (parentContext & flag) !== 0;
+}
+function setDefaultShallowSuspenseContext(parentContext) {
+  return parentContext & SubtreeSuspenseContextMask;
+}
+function setShallowSuspenseContext(parentContext, shallowContext) {
+  return parentContext & SubtreeSuspenseContextMask | shallowContext;
+}
+function addSubtreeSuspenseContext(parentContext, subtreeContext) {
+  return parentContext | subtreeContext;
+}
+function pushSuspenseContext(fiber, newContext) {
+  push(suspenseStackCursor, newContext, fiber);
+}
+function popSuspenseContext(fiber) {
+  pop(suspenseStackCursor, fiber);
+}
+
+function shouldCaptureSuspense(workInProgress, hasInvisibleParent) {
+  // If it was the primary children that just suspended, capture and render the
+  // fallback. Otherwise, don't capture and bubble to the next boundary.
+  var nextState 
