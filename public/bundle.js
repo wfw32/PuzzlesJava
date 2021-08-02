@@ -61659,4 +61659,314 @@ function updateReducer(reducer, initialArg, init) {
             suspenseConfig: update.suspenseConfig,
             action: update.action,
             eagerReducer: update.eagerReducer,
-  
+            eagerState: update.eagerState,
+            next: null
+          };
+          newBaseQueueLast = newBaseQueueLast.next = _clone;
+        } // Mark the event time of this update as relevant to this render pass.
+        // TODO: This should ideally use the true event time of this update rather than
+        // its priority which is a derived and not reverseable value.
+        // TODO: We should skip this update if it was already committed but currently
+        // we have no way of detecting the difference between a committed and suspended
+        // update here.
+
+
+        markRenderEventTimeAndConfig(updateExpirationTime, update.suspenseConfig); // Process this update.
+
+        if (update.eagerReducer === reducer) {
+          // If this update was processed eagerly, and its reducer matches the
+          // current reducer, we can use the eagerly computed state.
+          newState = update.eagerState;
+        } else {
+          var action = update.action;
+          newState = reducer(newState, action);
+        }
+      }
+
+      update = update.next;
+    } while (update !== null && update !== first);
+
+    if (newBaseQueueLast === null) {
+      newBaseState = newState;
+    } else {
+      newBaseQueueLast.next = newBaseQueueFirst;
+    } // Mark that the fiber performed work, but only if the new state is
+    // different from the current state.
+
+
+    if (!objectIs(newState, hook.memoizedState)) {
+      markWorkInProgressReceivedUpdate();
+    }
+
+    hook.memoizedState = newState;
+    hook.baseState = newBaseState;
+    hook.baseQueue = newBaseQueueLast;
+    queue.lastRenderedState = newState;
+  }
+
+  var dispatch = queue.dispatch;
+  return [hook.memoizedState, dispatch];
+}
+
+function rerenderReducer(reducer, initialArg, init) {
+  var hook = updateWorkInProgressHook();
+  var queue = hook.queue;
+
+  if (!(queue !== null)) {
+    {
+      throw Error( "Should have a queue. This is likely a bug in React. Please file an issue." );
+    }
+  }
+
+  queue.lastRenderedReducer = reducer; // This is a re-render. Apply the new render phase updates to the previous
+  // work-in-progress hook.
+
+  var dispatch = queue.dispatch;
+  var lastRenderPhaseUpdate = queue.pending;
+  var newState = hook.memoizedState;
+
+  if (lastRenderPhaseUpdate !== null) {
+    // The queue doesn't persist past this render pass.
+    queue.pending = null;
+    var firstRenderPhaseUpdate = lastRenderPhaseUpdate.next;
+    var update = firstRenderPhaseUpdate;
+
+    do {
+      // Process this render phase update. We don't have to check the
+      // priority because it will always be the same as the current
+      // render's.
+      var action = update.action;
+      newState = reducer(newState, action);
+      update = update.next;
+    } while (update !== firstRenderPhaseUpdate); // Mark that the fiber performed work, but only if the new state is
+    // different from the current state.
+
+
+    if (!objectIs(newState, hook.memoizedState)) {
+      markWorkInProgressReceivedUpdate();
+    }
+
+    hook.memoizedState = newState; // Don't persist the state accumulated from the render phase updates to
+    // the base state unless the queue is empty.
+    // TODO: Not sure if this is the desired semantics, but it's what we
+    // do for gDSFP. I can't remember why.
+
+    if (hook.baseQueue === null) {
+      hook.baseState = newState;
+    }
+
+    queue.lastRenderedState = newState;
+  }
+
+  return [newState, dispatch];
+}
+
+function mountState(initialState) {
+  var hook = mountWorkInProgressHook();
+
+  if (typeof initialState === 'function') {
+    // $FlowFixMe: Flow doesn't like mixed types
+    initialState = initialState();
+  }
+
+  hook.memoizedState = hook.baseState = initialState;
+  var queue = hook.queue = {
+    pending: null,
+    dispatch: null,
+    lastRenderedReducer: basicStateReducer,
+    lastRenderedState: initialState
+  };
+  var dispatch = queue.dispatch = dispatchAction.bind(null, currentlyRenderingFiber$1, queue);
+  return [hook.memoizedState, dispatch];
+}
+
+function updateState(initialState) {
+  return updateReducer(basicStateReducer);
+}
+
+function rerenderState(initialState) {
+  return rerenderReducer(basicStateReducer);
+}
+
+function pushEffect(tag, create, destroy, deps) {
+  var effect = {
+    tag: tag,
+    create: create,
+    destroy: destroy,
+    deps: deps,
+    // Circular
+    next: null
+  };
+  var componentUpdateQueue = currentlyRenderingFiber$1.updateQueue;
+
+  if (componentUpdateQueue === null) {
+    componentUpdateQueue = createFunctionComponentUpdateQueue();
+    currentlyRenderingFiber$1.updateQueue = componentUpdateQueue;
+    componentUpdateQueue.lastEffect = effect.next = effect;
+  } else {
+    var lastEffect = componentUpdateQueue.lastEffect;
+
+    if (lastEffect === null) {
+      componentUpdateQueue.lastEffect = effect.next = effect;
+    } else {
+      var firstEffect = lastEffect.next;
+      lastEffect.next = effect;
+      effect.next = firstEffect;
+      componentUpdateQueue.lastEffect = effect;
+    }
+  }
+
+  return effect;
+}
+
+function mountRef(initialValue) {
+  var hook = mountWorkInProgressHook();
+  var ref = {
+    current: initialValue
+  };
+
+  {
+    Object.seal(ref);
+  }
+
+  hook.memoizedState = ref;
+  return ref;
+}
+
+function updateRef(initialValue) {
+  var hook = updateWorkInProgressHook();
+  return hook.memoizedState;
+}
+
+function mountEffectImpl(fiberEffectTag, hookEffectTag, create, deps) {
+  var hook = mountWorkInProgressHook();
+  var nextDeps = deps === undefined ? null : deps;
+  currentlyRenderingFiber$1.effectTag |= fiberEffectTag;
+  hook.memoizedState = pushEffect(HasEffect | hookEffectTag, create, undefined, nextDeps);
+}
+
+function updateEffectImpl(fiberEffectTag, hookEffectTag, create, deps) {
+  var hook = updateWorkInProgressHook();
+  var nextDeps = deps === undefined ? null : deps;
+  var destroy = undefined;
+
+  if (currentHook !== null) {
+    var prevEffect = currentHook.memoizedState;
+    destroy = prevEffect.destroy;
+
+    if (nextDeps !== null) {
+      var prevDeps = prevEffect.deps;
+
+      if (areHookInputsEqual(nextDeps, prevDeps)) {
+        pushEffect(hookEffectTag, create, destroy, nextDeps);
+        return;
+      }
+    }
+  }
+
+  currentlyRenderingFiber$1.effectTag |= fiberEffectTag;
+  hook.memoizedState = pushEffect(HasEffect | hookEffectTag, create, destroy, nextDeps);
+}
+
+function mountEffect(create, deps) {
+  {
+    // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
+    if ('undefined' !== typeof jest) {
+      warnIfNotCurrentlyActingEffectsInDEV(currentlyRenderingFiber$1);
+    }
+  }
+
+  return mountEffectImpl(Update | Passive, Passive$1, create, deps);
+}
+
+function updateEffect(create, deps) {
+  {
+    // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
+    if ('undefined' !== typeof jest) {
+      warnIfNotCurrentlyActingEffectsInDEV(currentlyRenderingFiber$1);
+    }
+  }
+
+  return updateEffectImpl(Update | Passive, Passive$1, create, deps);
+}
+
+function mountLayoutEffect(create, deps) {
+  return mountEffectImpl(Update, Layout, create, deps);
+}
+
+function updateLayoutEffect(create, deps) {
+  return updateEffectImpl(Update, Layout, create, deps);
+}
+
+function imperativeHandleEffect(create, ref) {
+  if (typeof ref === 'function') {
+    var refCallback = ref;
+
+    var _inst = create();
+
+    refCallback(_inst);
+    return function () {
+      refCallback(null);
+    };
+  } else if (ref !== null && ref !== undefined) {
+    var refObject = ref;
+
+    {
+      if (!refObject.hasOwnProperty('current')) {
+        error('Expected useImperativeHandle() first argument to either be a ' + 'ref callback or React.createRef() object. Instead received: %s.', 'an object with keys {' + Object.keys(refObject).join(', ') + '}');
+      }
+    }
+
+    var _inst2 = create();
+
+    refObject.current = _inst2;
+    return function () {
+      refObject.current = null;
+    };
+  }
+}
+
+function mountImperativeHandle(ref, create, deps) {
+  {
+    if (typeof create !== 'function') {
+      error('Expected useImperativeHandle() second argument to be a function ' + 'that creates a handle. Instead received: %s.', create !== null ? typeof create : 'null');
+    }
+  } // TODO: If deps are provided, should we skip comparing the ref itself?
+
+
+  var effectDeps = deps !== null && deps !== undefined ? deps.concat([ref]) : null;
+  return mountEffectImpl(Update, Layout, imperativeHandleEffect.bind(null, create, ref), effectDeps);
+}
+
+function updateImperativeHandle(ref, create, deps) {
+  {
+    if (typeof create !== 'function') {
+      error('Expected useImperativeHandle() second argument to be a function ' + 'that creates a handle. Instead received: %s.', create !== null ? typeof create : 'null');
+    }
+  } // TODO: If deps are provided, should we skip comparing the ref itself?
+
+
+  var effectDeps = deps !== null && deps !== undefined ? deps.concat([ref]) : null;
+  return updateEffectImpl(Update, Layout, imperativeHandleEffect.bind(null, create, ref), effectDeps);
+}
+
+function mountDebugValue(value, formatterFn) {// This hook is normally a no-op.
+  // The react-debug-hooks package injects its own implementation
+  // so that e.g. DevTools can display custom hook values.
+}
+
+var updateDebugValue = mountDebugValue;
+
+function mountCallback(callback, deps) {
+  var hook = mountWorkInProgressHook();
+  var nextDeps = deps === undefined ? null : deps;
+  hook.memoizedState = [callback, nextDeps];
+  return callback;
+}
+
+function updateCallback(callback, deps) {
+  var hook = updateWorkInProgressHook();
+  var nextDeps = deps === undefined ? null : deps;
+  var prevState = hook.memoizedState;
+
+  if (prevSt
