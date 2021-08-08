@@ -63176,4 +63176,263 @@ function prepareToHydrateHostTextInstance(fiber) {
   {
     if (shouldUpdate) {
       // We assume that prepareToHydrateHostTextInstance is called in a context where the
-      // hydrati
+      // hydration parent is the parent host component of this host text.
+      var returnFiber = hydrationParentFiber;
+
+      if (returnFiber !== null) {
+        switch (returnFiber.tag) {
+          case HostRoot:
+            {
+              var parentContainer = returnFiber.stateNode.containerInfo;
+              didNotMatchHydratedContainerTextInstance(parentContainer, textInstance, textContent);
+              break;
+            }
+
+          case HostComponent:
+            {
+              var parentType = returnFiber.type;
+              var parentProps = returnFiber.memoizedProps;
+              var parentInstance = returnFiber.stateNode;
+              didNotMatchHydratedTextInstance(parentType, parentProps, parentInstance, textInstance, textContent);
+              break;
+            }
+        }
+      }
+    }
+  }
+
+  return shouldUpdate;
+}
+
+function skipPastDehydratedSuspenseInstance(fiber) {
+
+  var suspenseState = fiber.memoizedState;
+  var suspenseInstance = suspenseState !== null ? suspenseState.dehydrated : null;
+
+  if (!suspenseInstance) {
+    {
+      throw Error( "Expected to have a hydrated suspense instance. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+
+  return getNextHydratableInstanceAfterSuspenseInstance(suspenseInstance);
+}
+
+function popToNextHostParent(fiber) {
+  var parent = fiber.return;
+
+  while (parent !== null && parent.tag !== HostComponent && parent.tag !== HostRoot && parent.tag !== SuspenseComponent) {
+    parent = parent.return;
+  }
+
+  hydrationParentFiber = parent;
+}
+
+function popHydrationState(fiber) {
+
+  if (fiber !== hydrationParentFiber) {
+    // We're deeper than the current hydration context, inside an inserted
+    // tree.
+    return false;
+  }
+
+  if (!isHydrating) {
+    // If we're not currently hydrating but we're in a hydration context, then
+    // we were an insertion and now need to pop up reenter hydration of our
+    // siblings.
+    popToNextHostParent(fiber);
+    isHydrating = true;
+    return false;
+  }
+
+  var type = fiber.type; // If we have any remaining hydratable nodes, we need to delete them now.
+  // We only do this deeper than head and body since they tend to have random
+  // other nodes in them. We also ignore components with pure text content in
+  // side of them.
+  // TODO: Better heuristic.
+
+  if (fiber.tag !== HostComponent || type !== 'head' && type !== 'body' && !shouldSetTextContent(type, fiber.memoizedProps)) {
+    var nextInstance = nextHydratableInstance;
+
+    while (nextInstance) {
+      deleteHydratableInstance(fiber, nextInstance);
+      nextInstance = getNextHydratableSibling(nextInstance);
+    }
+  }
+
+  popToNextHostParent(fiber);
+
+  if (fiber.tag === SuspenseComponent) {
+    nextHydratableInstance = skipPastDehydratedSuspenseInstance(fiber);
+  } else {
+    nextHydratableInstance = hydrationParentFiber ? getNextHydratableSibling(fiber.stateNode) : null;
+  }
+
+  return true;
+}
+
+function resetHydrationState() {
+
+  hydrationParentFiber = null;
+  nextHydratableInstance = null;
+  isHydrating = false;
+}
+
+var ReactCurrentOwner$1 = ReactSharedInternals.ReactCurrentOwner;
+var didReceiveUpdate = false;
+var didWarnAboutBadClass;
+var didWarnAboutModulePatternComponent;
+var didWarnAboutContextTypeOnFunctionComponent;
+var didWarnAboutGetDerivedStateOnFunctionComponent;
+var didWarnAboutFunctionRefs;
+var didWarnAboutReassigningProps;
+var didWarnAboutRevealOrder;
+var didWarnAboutTailOptions;
+
+{
+  didWarnAboutBadClass = {};
+  didWarnAboutModulePatternComponent = {};
+  didWarnAboutContextTypeOnFunctionComponent = {};
+  didWarnAboutGetDerivedStateOnFunctionComponent = {};
+  didWarnAboutFunctionRefs = {};
+  didWarnAboutReassigningProps = false;
+  didWarnAboutRevealOrder = {};
+  didWarnAboutTailOptions = {};
+}
+
+function reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime) {
+  if (current === null) {
+    // If this is a fresh new component that hasn't been rendered yet, we
+    // won't update its child set by applying minimal side-effects. Instead,
+    // we will add them all to the child before it gets rendered. That means
+    // we can optimize this reconciliation pass by not tracking side-effects.
+    workInProgress.child = mountChildFibers(workInProgress, null, nextChildren, renderExpirationTime);
+  } else {
+    // If the current child is the same as the work in progress, it means that
+    // we haven't yet started any work on these children. Therefore, we use
+    // the clone algorithm to create a copy of all the current children.
+    // If we had any progressed work already, that is invalid at this point so
+    // let's throw it out.
+    workInProgress.child = reconcileChildFibers(workInProgress, current.child, nextChildren, renderExpirationTime);
+  }
+}
+
+function forceUnmountCurrentAndReconcile(current, workInProgress, nextChildren, renderExpirationTime) {
+  // This function is fork of reconcileChildren. It's used in cases where we
+  // want to reconcile without matching against the existing set. This has the
+  // effect of all current children being unmounted; even if the type and key
+  // are the same, the old child is unmounted and a new child is created.
+  //
+  // To do this, we're going to go through the reconcile algorithm twice. In
+  // the first pass, we schedule a deletion for all the current children by
+  // passing null.
+  workInProgress.child = reconcileChildFibers(workInProgress, current.child, null, renderExpirationTime); // In the second pass, we mount the new children. The trick here is that we
+  // pass null in place of where we usually pass the current child set. This has
+  // the effect of remounting all children regardless of whether their
+  // identities match.
+
+  workInProgress.child = reconcileChildFibers(workInProgress, null, nextChildren, renderExpirationTime);
+}
+
+function updateForwardRef(current, workInProgress, Component, nextProps, renderExpirationTime) {
+  // TODO: current can be non-null here even if the component
+  // hasn't yet mounted. This happens after the first render suspends.
+  // We'll need to figure out if this is fine or can cause issues.
+  {
+    if (workInProgress.type !== workInProgress.elementType) {
+      // Lazy component props can't be validated in createElement
+      // because they're only guaranteed to be resolved here.
+      var innerPropTypes = Component.propTypes;
+
+      if (innerPropTypes) {
+        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        'prop', getComponentName(Component), getCurrentFiberStackInDev);
+      }
+    }
+  }
+
+  var render = Component.render;
+  var ref = workInProgress.ref; // The rest is a fork of updateFunctionComponent
+
+  var nextChildren;
+  prepareToReadContext(workInProgress, renderExpirationTime);
+
+  {
+    ReactCurrentOwner$1.current = workInProgress;
+    setIsRendering(true);
+    nextChildren = renderWithHooks(current, workInProgress, render, nextProps, ref, renderExpirationTime);
+
+    if ( workInProgress.mode & StrictMode) {
+      // Only double-render components with Hooks
+      if (workInProgress.memoizedState !== null) {
+        nextChildren = renderWithHooks(current, workInProgress, render, nextProps, ref, renderExpirationTime);
+      }
+    }
+
+    setIsRendering(false);
+  }
+
+  if (current !== null && !didReceiveUpdate) {
+    bailoutHooks(current, workInProgress, renderExpirationTime);
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+  } // React DevTools reads this flag.
+
+
+  workInProgress.effectTag |= PerformedWork;
+  reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function updateMemoComponent(current, workInProgress, Component, nextProps, updateExpirationTime, renderExpirationTime) {
+  if (current === null) {
+    var type = Component.type;
+
+    if (isSimpleFunctionComponent(type) && Component.compare === null && // SimpleMemoComponent codepath doesn't resolve outer props either.
+    Component.defaultProps === undefined) {
+      var resolvedType = type;
+
+      {
+        resolvedType = resolveFunctionForHotReloading(type);
+      } // If this is a plain function component without default props,
+      // and with only the default shallow comparison, we upgrade it
+      // to a SimpleMemoComponent to allow fast path updates.
+
+
+      workInProgress.tag = SimpleMemoComponent;
+      workInProgress.type = resolvedType;
+
+      {
+        validateFunctionComponentInDev(workInProgress, type);
+      }
+
+      return updateSimpleMemoComponent(current, workInProgress, resolvedType, nextProps, updateExpirationTime, renderExpirationTime);
+    }
+
+    {
+      var innerPropTypes = type.propTypes;
+
+      if (innerPropTypes) {
+        // Inner memo component props aren't currently validated in createElement.
+        // We could move it there, but we'd still need this for lazy code path.
+        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        'prop', getComponentName(type), getCurrentFiberStackInDev);
+      }
+    }
+
+    var child = createFiberFromTypeAndProps(Component.type, null, nextProps, null, workInProgress.mode, renderExpirationTime);
+    child.ref = workInProgress.ref;
+    child.return = workInProgress;
+    workInProgress.child = child;
+    return child;
+  }
+
+  {
+    var _type = Component.type;
+    var _innerPropTypes = _type.propTypes;
+
+    if (_innerPropTypes) {
+      // Inner memo component props aren't currently validated in createElement.
+      // We could move it there, but we'd still need this for lazy code path.
+      checkPropTypes(_innerPropTypes, nextProps, // Resolved props
+      'prop', getComponentName(_type), getCurrentFiberStackInDev);
+ 
