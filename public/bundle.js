@@ -63948,4 +63948,250 @@ function mountLazyComponent(_current, workInProgress, elementType, updateExpirat
 
   {
     {
-      throw Error( "Element type is invalid. Received a promise that resolves to: " + Component + ". Lazy element type must resolve to a c
+      throw Error( "Element type is invalid. Received a promise that resolves to: " + Component + ". Lazy element type must resolve to a class or function." + hint );
+    }
+  }
+}
+
+function mountIncompleteClassComponent(_current, workInProgress, Component, nextProps, renderExpirationTime) {
+  if (_current !== null) {
+    // An incomplete component only mounts if it suspended inside a non-
+    // concurrent tree, in an inconsistent state. We want to treat it like
+    // a new mount, even though an empty version of it already committed.
+    // Disconnect the alternate pointers.
+    _current.alternate = null;
+    workInProgress.alternate = null; // Since this is conceptually a new fiber, schedule a Placement effect
+
+    workInProgress.effectTag |= Placement;
+  } // Promote the fiber to a class and try rendering again.
+
+
+  workInProgress.tag = ClassComponent; // The rest of this function is a fork of `updateClassComponent`
+  // Push context providers early to prevent context stack mismatches.
+  // During mounting we don't know the child context yet as the instance doesn't exist.
+  // We will invalidate the child context in finishClassComponent() right after rendering.
+
+  var hasContext;
+
+  if (isContextProvider(Component)) {
+    hasContext = true;
+    pushContextProvider(workInProgress);
+  } else {
+    hasContext = false;
+  }
+
+  prepareToReadContext(workInProgress, renderExpirationTime);
+  constructClassInstance(workInProgress, Component, nextProps);
+  mountClassInstance(workInProgress, Component, nextProps, renderExpirationTime);
+  return finishClassComponent(null, workInProgress, Component, true, hasContext, renderExpirationTime);
+}
+
+function mountIndeterminateComponent(_current, workInProgress, Component, renderExpirationTime) {
+  if (_current !== null) {
+    // An indeterminate component only mounts if it suspended inside a non-
+    // concurrent tree, in an inconsistent state. We want to treat it like
+    // a new mount, even though an empty version of it already committed.
+    // Disconnect the alternate pointers.
+    _current.alternate = null;
+    workInProgress.alternate = null; // Since this is conceptually a new fiber, schedule a Placement effect
+
+    workInProgress.effectTag |= Placement;
+  }
+
+  var props = workInProgress.pendingProps;
+  var context;
+
+  {
+    var unmaskedContext = getUnmaskedContext(workInProgress, Component, false);
+    context = getMaskedContext(workInProgress, unmaskedContext);
+  }
+
+  prepareToReadContext(workInProgress, renderExpirationTime);
+  var value;
+
+  {
+    if (Component.prototype && typeof Component.prototype.render === 'function') {
+      var componentName = getComponentName(Component) || 'Unknown';
+
+      if (!didWarnAboutBadClass[componentName]) {
+        error("The <%s /> component appears to have a render method, but doesn't extend React.Component. " + 'This is likely to cause errors. Change %s to extend React.Component instead.', componentName, componentName);
+
+        didWarnAboutBadClass[componentName] = true;
+      }
+    }
+
+    if (workInProgress.mode & StrictMode) {
+      ReactStrictModeWarnings.recordLegacyContextWarning(workInProgress, null);
+    }
+
+    setIsRendering(true);
+    ReactCurrentOwner$1.current = workInProgress;
+    value = renderWithHooks(null, workInProgress, Component, props, context, renderExpirationTime);
+    setIsRendering(false);
+  } // React DevTools reads this flag.
+
+
+  workInProgress.effectTag |= PerformedWork;
+
+  if (typeof value === 'object' && value !== null && typeof value.render === 'function' && value.$$typeof === undefined) {
+    {
+      var _componentName = getComponentName(Component) || 'Unknown';
+
+      if (!didWarnAboutModulePatternComponent[_componentName]) {
+        error('The <%s /> component appears to be a function component that returns a class instance. ' + 'Change %s to a class that extends React.Component instead. ' + "If you can't use a class try assigning the prototype on the function as a workaround. " + "`%s.prototype = React.Component.prototype`. Don't use an arrow function since it " + 'cannot be called with `new` by React.', _componentName, _componentName, _componentName);
+
+        didWarnAboutModulePatternComponent[_componentName] = true;
+      }
+    } // Proceed under the assumption that this is a class instance
+
+
+    workInProgress.tag = ClassComponent; // Throw out any hooks that were used.
+
+    workInProgress.memoizedState = null;
+    workInProgress.updateQueue = null; // Push context providers early to prevent context stack mismatches.
+    // During mounting we don't know the child context yet as the instance doesn't exist.
+    // We will invalidate the child context in finishClassComponent() right after rendering.
+
+    var hasContext = false;
+
+    if (isContextProvider(Component)) {
+      hasContext = true;
+      pushContextProvider(workInProgress);
+    } else {
+      hasContext = false;
+    }
+
+    workInProgress.memoizedState = value.state !== null && value.state !== undefined ? value.state : null;
+    initializeUpdateQueue(workInProgress);
+    var getDerivedStateFromProps = Component.getDerivedStateFromProps;
+
+    if (typeof getDerivedStateFromProps === 'function') {
+      applyDerivedStateFromProps(workInProgress, Component, getDerivedStateFromProps, props);
+    }
+
+    adoptClassInstance(workInProgress, value);
+    mountClassInstance(workInProgress, Component, props, renderExpirationTime);
+    return finishClassComponent(null, workInProgress, Component, true, hasContext, renderExpirationTime);
+  } else {
+    // Proceed under the assumption that this is a function component
+    workInProgress.tag = FunctionComponent;
+
+    {
+
+      if ( workInProgress.mode & StrictMode) {
+        // Only double-render components with Hooks
+        if (workInProgress.memoizedState !== null) {
+          value = renderWithHooks(null, workInProgress, Component, props, context, renderExpirationTime);
+        }
+      }
+    }
+
+    reconcileChildren(null, workInProgress, value, renderExpirationTime);
+
+    {
+      validateFunctionComponentInDev(workInProgress, Component);
+    }
+
+    return workInProgress.child;
+  }
+}
+
+function validateFunctionComponentInDev(workInProgress, Component) {
+  {
+    if (Component) {
+      if (Component.childContextTypes) {
+        error('%s(...): childContextTypes cannot be defined on a function component.', Component.displayName || Component.name || 'Component');
+      }
+    }
+
+    if (workInProgress.ref !== null) {
+      var info = '';
+      var ownerName = getCurrentFiberOwnerNameInDevOrNull();
+
+      if (ownerName) {
+        info += '\n\nCheck the render method of `' + ownerName + '`.';
+      }
+
+      var warningKey = ownerName || workInProgress._debugID || '';
+      var debugSource = workInProgress._debugSource;
+
+      if (debugSource) {
+        warningKey = debugSource.fileName + ':' + debugSource.lineNumber;
+      }
+
+      if (!didWarnAboutFunctionRefs[warningKey]) {
+        didWarnAboutFunctionRefs[warningKey] = true;
+
+        error('Function components cannot be given refs. ' + 'Attempts to access this ref will fail. ' + 'Did you mean to use React.forwardRef()?%s', info);
+      }
+    }
+
+    if (typeof Component.getDerivedStateFromProps === 'function') {
+      var _componentName2 = getComponentName(Component) || 'Unknown';
+
+      if (!didWarnAboutGetDerivedStateOnFunctionComponent[_componentName2]) {
+        error('%s: Function components do not support getDerivedStateFromProps.', _componentName2);
+
+        didWarnAboutGetDerivedStateOnFunctionComponent[_componentName2] = true;
+      }
+    }
+
+    if (typeof Component.contextType === 'object' && Component.contextType !== null) {
+      var _componentName3 = getComponentName(Component) || 'Unknown';
+
+      if (!didWarnAboutContextTypeOnFunctionComponent[_componentName3]) {
+        error('%s: Function components do not support contextType.', _componentName3);
+
+        didWarnAboutContextTypeOnFunctionComponent[_componentName3] = true;
+      }
+    }
+  }
+}
+
+var SUSPENDED_MARKER = {
+  dehydrated: null,
+  retryTime: NoWork
+};
+
+function shouldRemainOnFallback(suspenseContext, current, workInProgress) {
+  // If the context is telling us that we should show a fallback, and we're not
+  // already showing content, then we should show the fallback instead.
+  return hasSuspenseContext(suspenseContext, ForceSuspenseFallback) && (current === null || current.memoizedState !== null);
+}
+
+function updateSuspenseComponent(current, workInProgress, renderExpirationTime) {
+  var mode = workInProgress.mode;
+  var nextProps = workInProgress.pendingProps; // This is used by DevTools to force a boundary to suspend.
+
+  {
+    if (shouldSuspend(workInProgress)) {
+      workInProgress.effectTag |= DidCapture;
+    }
+  }
+
+  var suspenseContext = suspenseStackCursor.current;
+  var nextDidTimeout = false;
+  var didSuspend = (workInProgress.effectTag & DidCapture) !== NoEffect;
+
+  if (didSuspend || shouldRemainOnFallback(suspenseContext, current)) {
+    // Something in this boundary's subtree already suspended. Switch to
+    // rendering the fallback children.
+    nextDidTimeout = true;
+    workInProgress.effectTag &= ~DidCapture;
+  } else {
+    // Attempting the main content
+    if (current === null || current.memoizedState !== null) {
+      // This is a new mount or this boundary is already showing a fallback state.
+      // Mark this subtree context as having at least one invisible parent that could
+      // handle the fallback state.
+      // Boundaries without fallbacks or should be avoided are not considered since
+      // they cannot handle preferred fallback states.
+      if (nextProps.fallback !== undefined && nextProps.unstable_avoidThisFallback !== true) {
+        suspenseContext = addSubtreeSuspenseContext(suspenseContext, InvisibleParentSuspenseContext);
+      }
+    }
+  }
+
+  suspenseContext = setDefaultShallowSuspenseContext(suspenseContext);
+  pushSuspenseContext(workInProgress, suspenseContext); // This next part is a bit confusing. If the children timeout, we switch to
+  // showing the f
