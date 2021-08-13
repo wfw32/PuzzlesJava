@@ -63682,4 +63682,270 @@ function finishClassComponent(current, workInProgress, Component, shouldUpdate, 
       invalidateContextProvider(workInProgress, Component, false);
     }
 
-    return bailoutOnAlreadyFinished
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+  }
+
+  var instance = workInProgress.stateNode; // Rerender
+
+  ReactCurrentOwner$1.current = workInProgress;
+  var nextChildren;
+
+  if (didCaptureError && typeof Component.getDerivedStateFromError !== 'function') {
+    // If we captured an error, but getDerivedStateFromError is not defined,
+    // unmount all the children. componentDidCatch will schedule an update to
+    // re-render a fallback. This is temporary until we migrate everyone to
+    // the new API.
+    // TODO: Warn in a future release.
+    nextChildren = null;
+
+    {
+      stopProfilerTimerIfRunning();
+    }
+  } else {
+    {
+      setIsRendering(true);
+      nextChildren = instance.render();
+
+      if ( workInProgress.mode & StrictMode) {
+        instance.render();
+      }
+
+      setIsRendering(false);
+    }
+  } // React DevTools reads this flag.
+
+
+  workInProgress.effectTag |= PerformedWork;
+
+  if (current !== null && didCaptureError) {
+    // If we're recovering from an error, reconcile without reusing any of
+    // the existing children. Conceptually, the normal children and the children
+    // that are shown on error are two different sets, so we shouldn't reuse
+    // normal children even if their identities match.
+    forceUnmountCurrentAndReconcile(current, workInProgress, nextChildren, renderExpirationTime);
+  } else {
+    reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  } // Memoize state using the values we just used to render.
+  // TODO: Restructure so we never read values from the instance.
+
+
+  workInProgress.memoizedState = instance.state; // The context might have changed so we need to recalculate it.
+
+  if (hasContext) {
+    invalidateContextProvider(workInProgress, Component, true);
+  }
+
+  return workInProgress.child;
+}
+
+function pushHostRootContext(workInProgress) {
+  var root = workInProgress.stateNode;
+
+  if (root.pendingContext) {
+    pushTopLevelContextObject(workInProgress, root.pendingContext, root.pendingContext !== root.context);
+  } else if (root.context) {
+    // Should always be set
+    pushTopLevelContextObject(workInProgress, root.context, false);
+  }
+
+  pushHostContainer(workInProgress, root.containerInfo);
+}
+
+function updateHostRoot(current, workInProgress, renderExpirationTime) {
+  pushHostRootContext(workInProgress);
+  var updateQueue = workInProgress.updateQueue;
+
+  if (!(current !== null && updateQueue !== null)) {
+    {
+      throw Error( "If the root does not have an updateQueue, we should have already bailed out. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+
+  var nextProps = workInProgress.pendingProps;
+  var prevState = workInProgress.memoizedState;
+  var prevChildren = prevState !== null ? prevState.element : null;
+  cloneUpdateQueue(current, workInProgress);
+  processUpdateQueue(workInProgress, nextProps, null, renderExpirationTime);
+  var nextState = workInProgress.memoizedState; // Caution: React DevTools currently depends on this property
+  // being called "element".
+
+  var nextChildren = nextState.element;
+
+  if (nextChildren === prevChildren) {
+    // If the state is the same as before, that's a bailout because we had
+    // no work that expires at this time.
+    resetHydrationState();
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+  }
+
+  var root = workInProgress.stateNode;
+
+  if (root.hydrate && enterHydrationState(workInProgress)) {
+    // If we don't have any current children this might be the first pass.
+    // We always try to hydrate. If this isn't a hydration pass there won't
+    // be any children to hydrate which is effectively the same thing as
+    // not hydrating.
+    var child = mountChildFibers(workInProgress, null, nextChildren, renderExpirationTime);
+    workInProgress.child = child;
+    var node = child;
+
+    while (node) {
+      // Mark each child as hydrating. This is a fast path to know whether this
+      // tree is part of a hydrating tree. This is used to determine if a child
+      // node has fully mounted yet, and for scheduling event replaying.
+      // Conceptually this is similar to Placement in that a new subtree is
+      // inserted into the React tree here. It just happens to not need DOM
+      // mutations because it already exists.
+      node.effectTag = node.effectTag & ~Placement | Hydrating;
+      node = node.sibling;
+    }
+  } else {
+    // Otherwise reset hydration state in case we aborted and resumed another
+    // root.
+    reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+    resetHydrationState();
+  }
+
+  return workInProgress.child;
+}
+
+function updateHostComponent(current, workInProgress, renderExpirationTime) {
+  pushHostContext(workInProgress);
+
+  if (current === null) {
+    tryToClaimNextHydratableInstance(workInProgress);
+  }
+
+  var type = workInProgress.type;
+  var nextProps = workInProgress.pendingProps;
+  var prevProps = current !== null ? current.memoizedProps : null;
+  var nextChildren = nextProps.children;
+  var isDirectTextChild = shouldSetTextContent(type, nextProps);
+
+  if (isDirectTextChild) {
+    // We special case a direct text child of a host node. This is a common
+    // case. We won't handle it as a reified child. We will instead handle
+    // this in the host environment that also has access to this prop. That
+    // avoids allocating another HostText fiber and traversing it.
+    nextChildren = null;
+  } else if (prevProps !== null && shouldSetTextContent(type, prevProps)) {
+    // If we're switching from a direct text child to a normal child, or to
+    // empty, we need to schedule the text content to be reset.
+    workInProgress.effectTag |= ContentReset;
+  }
+
+  markRef(current, workInProgress); // Check the host config to see if the children are offscreen/hidden.
+
+  if (workInProgress.mode & ConcurrentMode && renderExpirationTime !== Never && shouldDeprioritizeSubtree(type, nextProps)) {
+    {
+      markSpawnedWork(Never);
+    } // Schedule this fiber to re-render at offscreen priority. Then bailout.
+
+
+    workInProgress.expirationTime = workInProgress.childExpirationTime = Never;
+    return null;
+  }
+
+  reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function updateHostText(current, workInProgress) {
+  if (current === null) {
+    tryToClaimNextHydratableInstance(workInProgress);
+  } // Nothing to do here. This is terminal. We'll do the completion step
+  // immediately after.
+
+
+  return null;
+}
+
+function mountLazyComponent(_current, workInProgress, elementType, updateExpirationTime, renderExpirationTime) {
+  if (_current !== null) {
+    // A lazy component only mounts if it suspended inside a non-
+    // concurrent tree, in an inconsistent state. We want to treat it like
+    // a new mount, even though an empty version of it already committed.
+    // Disconnect the alternate pointers.
+    _current.alternate = null;
+    workInProgress.alternate = null; // Since this is conceptually a new fiber, schedule a Placement effect
+
+    workInProgress.effectTag |= Placement;
+  }
+
+  var props = workInProgress.pendingProps; // We can't start a User Timing measurement with correct label yet.
+  // Cancel and resume right after we know the tag.
+
+  cancelWorkTimer(workInProgress);
+  var Component = readLazyComponentType(elementType); // Store the unwrapped component in the type.
+
+  workInProgress.type = Component;
+  var resolvedTag = workInProgress.tag = resolveLazyComponentTag(Component);
+  startWorkTimer(workInProgress);
+  var resolvedProps = resolveDefaultProps(Component, props);
+  var child;
+
+  switch (resolvedTag) {
+    case FunctionComponent:
+      {
+        {
+          validateFunctionComponentInDev(workInProgress, Component);
+          workInProgress.type = Component = resolveFunctionForHotReloading(Component);
+        }
+
+        child = updateFunctionComponent(null, workInProgress, Component, resolvedProps, renderExpirationTime);
+        return child;
+      }
+
+    case ClassComponent:
+      {
+        {
+          workInProgress.type = Component = resolveClassForHotReloading(Component);
+        }
+
+        child = updateClassComponent(null, workInProgress, Component, resolvedProps, renderExpirationTime);
+        return child;
+      }
+
+    case ForwardRef:
+      {
+        {
+          workInProgress.type = Component = resolveForwardRefForHotReloading(Component);
+        }
+
+        child = updateForwardRef(null, workInProgress, Component, resolvedProps, renderExpirationTime);
+        return child;
+      }
+
+    case MemoComponent:
+      {
+        {
+          if (workInProgress.type !== workInProgress.elementType) {
+            var outerPropTypes = Component.propTypes;
+
+            if (outerPropTypes) {
+              checkPropTypes(outerPropTypes, resolvedProps, // Resolved for outer only
+              'prop', getComponentName(Component), getCurrentFiberStackInDev);
+            }
+          }
+        }
+
+        child = updateMemoComponent(null, workInProgress, Component, resolveDefaultProps(Component.type, resolvedProps), // The inner type can have defaults too
+        updateExpirationTime, renderExpirationTime);
+        return child;
+      }
+  }
+
+  var hint = '';
+
+  {
+    if (Component !== null && typeof Component === 'object' && Component.$$typeof === REACT_LAZY_TYPE) {
+      hint = ' Did you wrap a component in React.lazy() more than once?';
+    }
+  } // This message intentionally doesn't mention ForwardRef or MemoComponent
+  // because the fact that it's a separate type of work is an
+  // implementation detail.
+
+
+  {
+    {
+      throw Error( "Element type is invalid. Received a promise that resolves to: " + Component + ". Lazy element type must resolve to a c
