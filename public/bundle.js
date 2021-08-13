@@ -63435,4 +63435,251 @@ function updateMemoComponent(current, workInProgress, Component, nextProps, upda
       // We could move it there, but we'd still need this for lazy code path.
       checkPropTypes(_innerPropTypes, nextProps, // Resolved props
       'prop', getComponentName(_type), getCurrentFiberStackInDev);
- 
+    }
+  }
+
+  var currentChild = current.child; // This is always exactly one child
+
+  if (updateExpirationTime < renderExpirationTime) {
+    // This will be the props with resolved defaultProps,
+    // unlike current.memoizedProps which will be the unresolved ones.
+    var prevProps = currentChild.memoizedProps; // Default to shallow comparison
+
+    var compare = Component.compare;
+    compare = compare !== null ? compare : shallowEqual;
+
+    if (compare(prevProps, nextProps) && current.ref === workInProgress.ref) {
+      return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+    }
+  } // React DevTools reads this flag.
+
+
+  workInProgress.effectTag |= PerformedWork;
+  var newChild = createWorkInProgress(currentChild, nextProps);
+  newChild.ref = workInProgress.ref;
+  newChild.return = workInProgress;
+  workInProgress.child = newChild;
+  return newChild;
+}
+
+function updateSimpleMemoComponent(current, workInProgress, Component, nextProps, updateExpirationTime, renderExpirationTime) {
+  // TODO: current can be non-null here even if the component
+  // hasn't yet mounted. This happens when the inner render suspends.
+  // We'll need to figure out if this is fine or can cause issues.
+  {
+    if (workInProgress.type !== workInProgress.elementType) {
+      // Lazy component props can't be validated in createElement
+      // because they're only guaranteed to be resolved here.
+      var outerMemoType = workInProgress.elementType;
+
+      if (outerMemoType.$$typeof === REACT_LAZY_TYPE) {
+        // We warn when you define propTypes on lazy()
+        // so let's just skip over it to find memo() outer wrapper.
+        // Inner props for memo are validated later.
+        outerMemoType = refineResolvedLazyComponent(outerMemoType);
+      }
+
+      var outerPropTypes = outerMemoType && outerMemoType.propTypes;
+
+      if (outerPropTypes) {
+        checkPropTypes(outerPropTypes, nextProps, // Resolved (SimpleMemoComponent has no defaultProps)
+        'prop', getComponentName(outerMemoType), getCurrentFiberStackInDev);
+      } // Inner propTypes will be validated in the function component path.
+
+    }
+  }
+
+  if (current !== null) {
+    var prevProps = current.memoizedProps;
+
+    if (shallowEqual(prevProps, nextProps) && current.ref === workInProgress.ref && ( // Prevent bailout if the implementation changed due to hot reload.
+     workInProgress.type === current.type )) {
+      didReceiveUpdate = false;
+
+      if (updateExpirationTime < renderExpirationTime) {
+        // The pending update priority was cleared at the beginning of
+        // beginWork. We're about to bail out, but there might be additional
+        // updates at a lower priority. Usually, the priority level of the
+        // remaining updates is accumlated during the evaluation of the
+        // component (i.e. when processing the update queue). But since since
+        // we're bailing out early *without* evaluating the component, we need
+        // to account for it here, too. Reset to the value of the current fiber.
+        // NOTE: This only applies to SimpleMemoComponent, not MemoComponent,
+        // because a MemoComponent fiber does not have hooks or an update queue;
+        // rather, it wraps around an inner component, which may or may not
+        // contains hooks.
+        // TODO: Move the reset at in beginWork out of the common path so that
+        // this is no longer necessary.
+        workInProgress.expirationTime = current.expirationTime;
+        return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+      }
+    }
+  }
+
+  return updateFunctionComponent(current, workInProgress, Component, nextProps, renderExpirationTime);
+}
+
+function updateFragment(current, workInProgress, renderExpirationTime) {
+  var nextChildren = workInProgress.pendingProps;
+  reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function updateMode(current, workInProgress, renderExpirationTime) {
+  var nextChildren = workInProgress.pendingProps.children;
+  reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function updateProfiler(current, workInProgress, renderExpirationTime) {
+  {
+    workInProgress.effectTag |= Update;
+  }
+
+  var nextProps = workInProgress.pendingProps;
+  var nextChildren = nextProps.children;
+  reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function markRef(current, workInProgress) {
+  var ref = workInProgress.ref;
+
+  if (current === null && ref !== null || current !== null && current.ref !== ref) {
+    // Schedule a Ref effect
+    workInProgress.effectTag |= Ref;
+  }
+}
+
+function updateFunctionComponent(current, workInProgress, Component, nextProps, renderExpirationTime) {
+  {
+    if (workInProgress.type !== workInProgress.elementType) {
+      // Lazy component props can't be validated in createElement
+      // because they're only guaranteed to be resolved here.
+      var innerPropTypes = Component.propTypes;
+
+      if (innerPropTypes) {
+        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        'prop', getComponentName(Component), getCurrentFiberStackInDev);
+      }
+    }
+  }
+
+  var context;
+
+  {
+    var unmaskedContext = getUnmaskedContext(workInProgress, Component, true);
+    context = getMaskedContext(workInProgress, unmaskedContext);
+  }
+
+  var nextChildren;
+  prepareToReadContext(workInProgress, renderExpirationTime);
+
+  {
+    ReactCurrentOwner$1.current = workInProgress;
+    setIsRendering(true);
+    nextChildren = renderWithHooks(current, workInProgress, Component, nextProps, context, renderExpirationTime);
+
+    if ( workInProgress.mode & StrictMode) {
+      // Only double-render components with Hooks
+      if (workInProgress.memoizedState !== null) {
+        nextChildren = renderWithHooks(current, workInProgress, Component, nextProps, context, renderExpirationTime);
+      }
+    }
+
+    setIsRendering(false);
+  }
+
+  if (current !== null && !didReceiveUpdate) {
+    bailoutHooks(current, workInProgress, renderExpirationTime);
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+  } // React DevTools reads this flag.
+
+
+  workInProgress.effectTag |= PerformedWork;
+  reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function updateClassComponent(current, workInProgress, Component, nextProps, renderExpirationTime) {
+  {
+    if (workInProgress.type !== workInProgress.elementType) {
+      // Lazy component props can't be validated in createElement
+      // because they're only guaranteed to be resolved here.
+      var innerPropTypes = Component.propTypes;
+
+      if (innerPropTypes) {
+        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        'prop', getComponentName(Component), getCurrentFiberStackInDev);
+      }
+    }
+  } // Push context providers early to prevent context stack mismatches.
+  // During mounting we don't know the child context yet as the instance doesn't exist.
+  // We will invalidate the child context in finishClassComponent() right after rendering.
+
+
+  var hasContext;
+
+  if (isContextProvider(Component)) {
+    hasContext = true;
+    pushContextProvider(workInProgress);
+  } else {
+    hasContext = false;
+  }
+
+  prepareToReadContext(workInProgress, renderExpirationTime);
+  var instance = workInProgress.stateNode;
+  var shouldUpdate;
+
+  if (instance === null) {
+    if (current !== null) {
+      // A class component without an instance only mounts if it suspended
+      // inside a non-concurrent tree, in an inconsistent state. We want to
+      // treat it like a new mount, even though an empty version of it already
+      // committed. Disconnect the alternate pointers.
+      current.alternate = null;
+      workInProgress.alternate = null; // Since this is conceptually a new fiber, schedule a Placement effect
+
+      workInProgress.effectTag |= Placement;
+    } // In the initial pass we might need to construct the instance.
+
+
+    constructClassInstance(workInProgress, Component, nextProps);
+    mountClassInstance(workInProgress, Component, nextProps, renderExpirationTime);
+    shouldUpdate = true;
+  } else if (current === null) {
+    // In a resume, we'll already have an instance we can reuse.
+    shouldUpdate = resumeMountClassInstance(workInProgress, Component, nextProps, renderExpirationTime);
+  } else {
+    shouldUpdate = updateClassInstance(current, workInProgress, Component, nextProps, renderExpirationTime);
+  }
+
+  var nextUnitOfWork = finishClassComponent(current, workInProgress, Component, shouldUpdate, hasContext, renderExpirationTime);
+
+  {
+    var inst = workInProgress.stateNode;
+
+    if (inst.props !== nextProps) {
+      if (!didWarnAboutReassigningProps) {
+        error('It looks like %s is reassigning its own `this.props` while rendering. ' + 'This is not supported and can lead to confusing bugs.', getComponentName(workInProgress.type) || 'a component');
+      }
+
+      didWarnAboutReassigningProps = true;
+    }
+  }
+
+  return nextUnitOfWork;
+}
+
+function finishClassComponent(current, workInProgress, Component, shouldUpdate, hasContext, renderExpirationTime) {
+  // Refs should update even if shouldComponentUpdate returns false
+  markRef(current, workInProgress);
+  var didCaptureError = (workInProgress.effectTag & DidCapture) !== NoEffect;
+
+  if (!shouldUpdate && !didCaptureError) {
+    // Context providers should defer to sCU for rendering
+    if (hasContext) {
+      invalidateContextProvider(workInProgress, Component, false);
+    }
+
+    return bailoutOnAlreadyFinished
