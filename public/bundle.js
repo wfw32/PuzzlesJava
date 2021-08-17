@@ -64659,4 +64659,279 @@ function updateSuspenseListComponent(current, workInProgress, renderExpirationTi
       // If we previously forced a fallback, we need to schedule work
       // on any nested boundaries to let them know to try to render
       // again. This is the same as context updating.
-      propagateSu
+      propagateSuspenseContextChange(workInProgress, workInProgress.child, renderExpirationTime);
+    }
+
+    suspenseContext = setDefaultShallowSuspenseContext(suspenseContext);
+  }
+
+  pushSuspenseContext(workInProgress, suspenseContext);
+
+  if ((workInProgress.mode & BlockingMode) === NoMode) {
+    // Outside of blocking mode, SuspenseList doesn't work so we just
+    // use make it a noop by treating it as the default revealOrder.
+    workInProgress.memoizedState = null;
+  } else {
+    switch (revealOrder) {
+      case 'forwards':
+        {
+          var lastContentRow = findLastContentRow(workInProgress.child);
+          var tail;
+
+          if (lastContentRow === null) {
+            // The whole list is part of the tail.
+            // TODO: We could fast path by just rendering the tail now.
+            tail = workInProgress.child;
+            workInProgress.child = null;
+          } else {
+            // Disconnect the tail rows after the content row.
+            // We're going to render them separately later.
+            tail = lastContentRow.sibling;
+            lastContentRow.sibling = null;
+          }
+
+          initSuspenseListRenderState(workInProgress, false, // isBackwards
+          tail, lastContentRow, tailMode, workInProgress.lastEffect);
+          break;
+        }
+
+      case 'backwards':
+        {
+          // We're going to find the first row that has existing content.
+          // At the same time we're going to reverse the list of everything
+          // we pass in the meantime. That's going to be our tail in reverse
+          // order.
+          var _tail = null;
+          var row = workInProgress.child;
+          workInProgress.child = null;
+
+          while (row !== null) {
+            var currentRow = row.alternate; // New rows can't be content rows.
+
+            if (currentRow !== null && findFirstSuspended(currentRow) === null) {
+              // This is the beginning of the main content.
+              workInProgress.child = row;
+              break;
+            }
+
+            var nextRow = row.sibling;
+            row.sibling = _tail;
+            _tail = row;
+            row = nextRow;
+          } // TODO: If workInProgress.child is null, we can continue on the tail immediately.
+
+
+          initSuspenseListRenderState(workInProgress, true, // isBackwards
+          _tail, null, // last
+          tailMode, workInProgress.lastEffect);
+          break;
+        }
+
+      case 'together':
+        {
+          initSuspenseListRenderState(workInProgress, false, // isBackwards
+          null, // tail
+          null, // last
+          undefined, workInProgress.lastEffect);
+          break;
+        }
+
+      default:
+        {
+          // The default reveal order is the same as not having
+          // a boundary.
+          workInProgress.memoizedState = null;
+        }
+    }
+  }
+
+  return workInProgress.child;
+}
+
+function updatePortalComponent(current, workInProgress, renderExpirationTime) {
+  pushHostContainer(workInProgress, workInProgress.stateNode.containerInfo);
+  var nextChildren = workInProgress.pendingProps;
+
+  if (current === null) {
+    // Portals are special because we don't append the children during mount
+    // but at commit. Therefore we need to track insertions which the normal
+    // flow doesn't do during mount. This doesn't happen at the root because
+    // the root always starts with a "current" with a null child.
+    // TODO: Consider unifying this with how the root works.
+    workInProgress.child = reconcileChildFibers(workInProgress, null, nextChildren, renderExpirationTime);
+  } else {
+    reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime);
+  }
+
+  return workInProgress.child;
+}
+
+function updateContextProvider(current, workInProgress, renderExpirationTime) {
+  var providerType = workInProgress.type;
+  var context = providerType._context;
+  var newProps = workInProgress.pendingProps;
+  var oldProps = workInProgress.memoizedProps;
+  var newValue = newProps.value;
+
+  {
+    var providerPropTypes = workInProgress.type.propTypes;
+
+    if (providerPropTypes) {
+      checkPropTypes(providerPropTypes, newProps, 'prop', 'Context.Provider', getCurrentFiberStackInDev);
+    }
+  }
+
+  pushProvider(workInProgress, newValue);
+
+  if (oldProps !== null) {
+    var oldValue = oldProps.value;
+    var changedBits = calculateChangedBits(context, newValue, oldValue);
+
+    if (changedBits === 0) {
+      // No change. Bailout early if children are the same.
+      if (oldProps.children === newProps.children && !hasContextChanged()) {
+        return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+      }
+    } else {
+      // The context value changed. Search for matching consumers and schedule
+      // them to update.
+      propagateContextChange(workInProgress, context, changedBits, renderExpirationTime);
+    }
+  }
+
+  var newChildren = newProps.children;
+  reconcileChildren(current, workInProgress, newChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+var hasWarnedAboutUsingContextAsConsumer = false;
+
+function updateContextConsumer(current, workInProgress, renderExpirationTime) {
+  var context = workInProgress.type; // The logic below for Context differs depending on PROD or DEV mode. In
+  // DEV mode, we create a separate object for Context.Consumer that acts
+  // like a proxy to Context. This proxy object adds unnecessary code in PROD
+  // so we use the old behaviour (Context.Consumer references Context) to
+  // reduce size and overhead. The separate object references context via
+  // a property called "_context", which also gives us the ability to check
+  // in DEV mode if this property exists or not and warn if it does not.
+
+  {
+    if (context._context === undefined) {
+      // This may be because it's a Context (rather than a Consumer).
+      // Or it may be because it's older React where they're the same thing.
+      // We only want to warn if we're sure it's a new React.
+      if (context !== context.Consumer) {
+        if (!hasWarnedAboutUsingContextAsConsumer) {
+          hasWarnedAboutUsingContextAsConsumer = true;
+
+          error('Rendering <Context> directly is not supported and will be removed in ' + 'a future major release. Did you mean to render <Context.Consumer> instead?');
+        }
+      }
+    } else {
+      context = context._context;
+    }
+  }
+
+  var newProps = workInProgress.pendingProps;
+  var render = newProps.children;
+
+  {
+    if (typeof render !== 'function') {
+      error('A context consumer was rendered with multiple children, or a child ' + "that isn't a function. A context consumer expects a single child " + 'that is a function. If you did pass a function, make sure there ' + 'is no trailing or leading whitespace around it.');
+    }
+  }
+
+  prepareToReadContext(workInProgress, renderExpirationTime);
+  var newValue = readContext(context, newProps.unstable_observedBits);
+  var newChildren;
+
+  {
+    ReactCurrentOwner$1.current = workInProgress;
+    setIsRendering(true);
+    newChildren = render(newValue);
+    setIsRendering(false);
+  } // React DevTools reads this flag.
+
+
+  workInProgress.effectTag |= PerformedWork;
+  reconcileChildren(current, workInProgress, newChildren, renderExpirationTime);
+  return workInProgress.child;
+}
+
+function markWorkInProgressReceivedUpdate() {
+  didReceiveUpdate = true;
+}
+
+function bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime) {
+  cancelWorkTimer(workInProgress);
+
+  if (current !== null) {
+    // Reuse previous dependencies
+    workInProgress.dependencies = current.dependencies;
+  }
+
+  {
+    // Don't update "base" render times for bailouts.
+    stopProfilerTimerIfRunning();
+  }
+
+  var updateExpirationTime = workInProgress.expirationTime;
+
+  if (updateExpirationTime !== NoWork) {
+    markUnprocessedUpdateTime(updateExpirationTime);
+  } // Check if the children have any pending work.
+
+
+  var childExpirationTime = workInProgress.childExpirationTime;
+
+  if (childExpirationTime < renderExpirationTime) {
+    // The children don't have any work either. We can skip them.
+    // TODO: Once we add back resuming, we should check if the children are
+    // a work-in-progress set. If so, we need to transfer their effects.
+    return null;
+  } else {
+    // This fiber doesn't have work, but its subtree does. Clone the child
+    // fibers and continue.
+    cloneChildFibers(current, workInProgress);
+    return workInProgress.child;
+  }
+}
+
+function remountFiber(current, oldWorkInProgress, newWorkInProgress) {
+  {
+    var returnFiber = oldWorkInProgress.return;
+
+    if (returnFiber === null) {
+      throw new Error('Cannot swap the root fiber.');
+    } // Disconnect from the old current.
+    // It will get deleted.
+
+
+    current.alternate = null;
+    oldWorkInProgress.alternate = null; // Connect to the new tree.
+
+    newWorkInProgress.index = oldWorkInProgress.index;
+    newWorkInProgress.sibling = oldWorkInProgress.sibling;
+    newWorkInProgress.return = oldWorkInProgress.return;
+    newWorkInProgress.ref = oldWorkInProgress.ref; // Replace the child/sibling pointers above it.
+
+    if (oldWorkInProgress === returnFiber.child) {
+      returnFiber.child = newWorkInProgress;
+    } else {
+      var prevSibling = returnFiber.child;
+
+      if (prevSibling === null) {
+        throw new Error('Expected parent to have a child.');
+      }
+
+      while (prevSibling.sibling !== oldWorkInProgress) {
+        prevSibling = prevSibling.sibling;
+
+        if (prevSibling === null) {
+          throw new Error('Expected to find the previous sibling.');
+        }
+      }
+
+      prevSibling.sibling = newWorkInProgress;
+    } // Delete the old fiber and place the new one.
+    // Since the old fiber is disconnected, we have to schedule it manu
