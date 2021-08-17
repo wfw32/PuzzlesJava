@@ -64398,4 +64398,265 @@ function updateSuspenseComponent(current, workInProgress, renderExpirationTime) 
 
         var _fallbackChildFragment3 = createFiberFromFragment(_nextFallbackChildren3, mode, renderExpirationTime, null);
 
-        _
+        _fallbackChildFragment3.return = workInProgress;
+        _primaryChildFragment3.sibling = _fallbackChildFragment3;
+        _fallbackChildFragment3.effectTag |= Placement;
+        _primaryChildFragment3.childExpirationTime = NoWork; // Skip the primary children, and continue working on the
+        // fallback children.
+
+        workInProgress.memoizedState = SUSPENDED_MARKER;
+        workInProgress.child = _primaryChildFragment3;
+        return _fallbackChildFragment3;
+      } else {
+        // Still haven't timed out. Continue rendering the children, like we
+        // normally do.
+        workInProgress.memoizedState = null;
+        var _nextPrimaryChildren2 = nextProps.children;
+        return workInProgress.child = reconcileChildFibers(workInProgress, _currentPrimaryChild, _nextPrimaryChildren2, renderExpirationTime);
+      }
+    }
+  }
+}
+
+function scheduleWorkOnFiber(fiber, renderExpirationTime) {
+  if (fiber.expirationTime < renderExpirationTime) {
+    fiber.expirationTime = renderExpirationTime;
+  }
+
+  var alternate = fiber.alternate;
+
+  if (alternate !== null && alternate.expirationTime < renderExpirationTime) {
+    alternate.expirationTime = renderExpirationTime;
+  }
+
+  scheduleWorkOnParentPath(fiber.return, renderExpirationTime);
+}
+
+function propagateSuspenseContextChange(workInProgress, firstChild, renderExpirationTime) {
+  // Mark any Suspense boundaries with fallbacks as having work to do.
+  // If they were previously forced into fallbacks, they may now be able
+  // to unblock.
+  var node = firstChild;
+
+  while (node !== null) {
+    if (node.tag === SuspenseComponent) {
+      var state = node.memoizedState;
+
+      if (state !== null) {
+        scheduleWorkOnFiber(node, renderExpirationTime);
+      }
+    } else if (node.tag === SuspenseListComponent) {
+      // If the tail is hidden there might not be an Suspense boundaries
+      // to schedule work on. In this case we have to schedule it on the
+      // list itself.
+      // We don't have to traverse to the children of the list since
+      // the list will propagate the change when it rerenders.
+      scheduleWorkOnFiber(node, renderExpirationTime);
+    } else if (node.child !== null) {
+      node.child.return = node;
+      node = node.child;
+      continue;
+    }
+
+    if (node === workInProgress) {
+      return;
+    }
+
+    while (node.sibling === null) {
+      if (node.return === null || node.return === workInProgress) {
+        return;
+      }
+
+      node = node.return;
+    }
+
+    node.sibling.return = node.return;
+    node = node.sibling;
+  }
+}
+
+function findLastContentRow(firstChild) {
+  // This is going to find the last row among these children that is already
+  // showing content on the screen, as opposed to being in fallback state or
+  // new. If a row has multiple Suspense boundaries, any of them being in the
+  // fallback state, counts as the whole row being in a fallback state.
+  // Note that the "rows" will be workInProgress, but any nested children
+  // will still be current since we haven't rendered them yet. The mounted
+  // order may not be the same as the new order. We use the new order.
+  var row = firstChild;
+  var lastContentRow = null;
+
+  while (row !== null) {
+    var currentRow = row.alternate; // New rows can't be content rows.
+
+    if (currentRow !== null && findFirstSuspended(currentRow) === null) {
+      lastContentRow = row;
+    }
+
+    row = row.sibling;
+  }
+
+  return lastContentRow;
+}
+
+function validateRevealOrder(revealOrder) {
+  {
+    if (revealOrder !== undefined && revealOrder !== 'forwards' && revealOrder !== 'backwards' && revealOrder !== 'together' && !didWarnAboutRevealOrder[revealOrder]) {
+      didWarnAboutRevealOrder[revealOrder] = true;
+
+      if (typeof revealOrder === 'string') {
+        switch (revealOrder.toLowerCase()) {
+          case 'together':
+          case 'forwards':
+          case 'backwards':
+            {
+              error('"%s" is not a valid value for revealOrder on <SuspenseList />. ' + 'Use lowercase "%s" instead.', revealOrder, revealOrder.toLowerCase());
+
+              break;
+            }
+
+          case 'forward':
+          case 'backward':
+            {
+              error('"%s" is not a valid value for revealOrder on <SuspenseList />. ' + 'React uses the -s suffix in the spelling. Use "%ss" instead.', revealOrder, revealOrder.toLowerCase());
+
+              break;
+            }
+
+          default:
+            error('"%s" is not a supported revealOrder on <SuspenseList />. ' + 'Did you mean "together", "forwards" or "backwards"?', revealOrder);
+
+            break;
+        }
+      } else {
+        error('%s is not a supported value for revealOrder on <SuspenseList />. ' + 'Did you mean "together", "forwards" or "backwards"?', revealOrder);
+      }
+    }
+  }
+}
+
+function validateTailOptions(tailMode, revealOrder) {
+  {
+    if (tailMode !== undefined && !didWarnAboutTailOptions[tailMode]) {
+      if (tailMode !== 'collapsed' && tailMode !== 'hidden') {
+        didWarnAboutTailOptions[tailMode] = true;
+
+        error('"%s" is not a supported value for tail on <SuspenseList />. ' + 'Did you mean "collapsed" or "hidden"?', tailMode);
+      } else if (revealOrder !== 'forwards' && revealOrder !== 'backwards') {
+        didWarnAboutTailOptions[tailMode] = true;
+
+        error('<SuspenseList tail="%s" /> is only valid if revealOrder is ' + '"forwards" or "backwards". ' + 'Did you mean to specify revealOrder="forwards"?', tailMode);
+      }
+    }
+  }
+}
+
+function validateSuspenseListNestedChild(childSlot, index) {
+  {
+    var isArray = Array.isArray(childSlot);
+    var isIterable = !isArray && typeof getIteratorFn(childSlot) === 'function';
+
+    if (isArray || isIterable) {
+      var type = isArray ? 'array' : 'iterable';
+
+      error('A nested %s was passed to row #%s in <SuspenseList />. Wrap it in ' + 'an additional SuspenseList to configure its revealOrder: ' + '<SuspenseList revealOrder=...> ... ' + '<SuspenseList revealOrder=...>{%s}</SuspenseList> ... ' + '</SuspenseList>', type, index, type);
+
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function validateSuspenseListChildren(children, revealOrder) {
+  {
+    if ((revealOrder === 'forwards' || revealOrder === 'backwards') && children !== undefined && children !== null && children !== false) {
+      if (Array.isArray(children)) {
+        for (var i = 0; i < children.length; i++) {
+          if (!validateSuspenseListNestedChild(children[i], i)) {
+            return;
+          }
+        }
+      } else {
+        var iteratorFn = getIteratorFn(children);
+
+        if (typeof iteratorFn === 'function') {
+          var childrenIterator = iteratorFn.call(children);
+
+          if (childrenIterator) {
+            var step = childrenIterator.next();
+            var _i = 0;
+
+            for (; !step.done; step = childrenIterator.next()) {
+              if (!validateSuspenseListNestedChild(step.value, _i)) {
+                return;
+              }
+
+              _i++;
+            }
+          }
+        } else {
+          error('A single row was passed to a <SuspenseList revealOrder="%s" />. ' + 'This is not useful since it needs multiple rows. ' + 'Did you mean to pass multiple children or an array?', revealOrder);
+        }
+      }
+    }
+  }
+}
+
+function initSuspenseListRenderState(workInProgress, isBackwards, tail, lastContentRow, tailMode, lastEffectBeforeRendering) {
+  var renderState = workInProgress.memoizedState;
+
+  if (renderState === null) {
+    workInProgress.memoizedState = {
+      isBackwards: isBackwards,
+      rendering: null,
+      renderingStartTime: 0,
+      last: lastContentRow,
+      tail: tail,
+      tailExpiration: 0,
+      tailMode: tailMode,
+      lastEffect: lastEffectBeforeRendering
+    };
+  } else {
+    // We can reuse the existing object from previous renders.
+    renderState.isBackwards = isBackwards;
+    renderState.rendering = null;
+    renderState.renderingStartTime = 0;
+    renderState.last = lastContentRow;
+    renderState.tail = tail;
+    renderState.tailExpiration = 0;
+    renderState.tailMode = tailMode;
+    renderState.lastEffect = lastEffectBeforeRendering;
+  }
+} // This can end up rendering this component multiple passes.
+// The first pass splits the children fibers into two sets. A head and tail.
+// We first render the head. If anything is in fallback state, we do another
+// pass through beginWork to rerender all children (including the tail) with
+// the force suspend context. If the first render didn't have anything in
+// in fallback state. Then we render each row in the tail one-by-one.
+// That happens in the completeWork phase without going back to beginWork.
+
+
+function updateSuspenseListComponent(current, workInProgress, renderExpirationTime) {
+  var nextProps = workInProgress.pendingProps;
+  var revealOrder = nextProps.revealOrder;
+  var tailMode = nextProps.tail;
+  var newChildren = nextProps.children;
+  validateRevealOrder(revealOrder);
+  validateTailOptions(tailMode, revealOrder);
+  validateSuspenseListChildren(newChildren, revealOrder);
+  reconcileChildren(current, workInProgress, newChildren, renderExpirationTime);
+  var suspenseContext = suspenseStackCursor.current;
+  var shouldForceFallback = hasSuspenseContext(suspenseContext, ForceSuspenseFallback);
+
+  if (shouldForceFallback) {
+    suspenseContext = setShallowSuspenseContext(suspenseContext, ForceSuspenseFallback);
+    workInProgress.effectTag |= DidCapture;
+  } else {
+    var didSuspendBefore = current !== null && (current.effectTag & DidCapture) !== NoEffect;
+
+    if (didSuspendBefore) {
+      // If we previously forced a fallback, we need to schedule work
+      // on any nested boundaries to let them know to try to render
+      // again. This is the same as context updating.
+      propagateSu
