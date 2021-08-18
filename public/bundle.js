@@ -64934,4 +64934,249 @@ function remountFiber(current, oldWorkInProgress, newWorkInProgress) {
 
       prevSibling.sibling = newWorkInProgress;
     } // Delete the old fiber and place the new one.
-    // Since the old fiber is disconnected, we have to schedule it manu
+    // Since the old fiber is disconnected, we have to schedule it manually.
+
+
+    var last = returnFiber.lastEffect;
+
+    if (last !== null) {
+      last.nextEffect = current;
+      returnFiber.lastEffect = current;
+    } else {
+      returnFiber.firstEffect = returnFiber.lastEffect = current;
+    }
+
+    current.nextEffect = null;
+    current.effectTag = Deletion;
+    newWorkInProgress.effectTag |= Placement; // Restart work from the new fiber.
+
+    return newWorkInProgress;
+  }
+}
+
+function beginWork(current, workInProgress, renderExpirationTime) {
+  var updateExpirationTime = workInProgress.expirationTime;
+
+  {
+    if (workInProgress._debugNeedsRemount && current !== null) {
+      // This will restart the begin phase with a new fiber.
+      return remountFiber(current, workInProgress, createFiberFromTypeAndProps(workInProgress.type, workInProgress.key, workInProgress.pendingProps, workInProgress._debugOwner || null, workInProgress.mode, workInProgress.expirationTime));
+    }
+  }
+
+  if (current !== null) {
+    var oldProps = current.memoizedProps;
+    var newProps = workInProgress.pendingProps;
+
+    if (oldProps !== newProps || hasContextChanged() || ( // Force a re-render if the implementation changed due to hot reload:
+     workInProgress.type !== current.type )) {
+      // If props or context changed, mark the fiber as having performed work.
+      // This may be unset if the props are determined to be equal later (memo).
+      didReceiveUpdate = true;
+    } else if (updateExpirationTime < renderExpirationTime) {
+      didReceiveUpdate = false; // This fiber does not have any pending work. Bailout without entering
+      // the begin phase. There's still some bookkeeping we that needs to be done
+      // in this optimized path, mostly pushing stuff onto the stack.
+
+      switch (workInProgress.tag) {
+        case HostRoot:
+          pushHostRootContext(workInProgress);
+          resetHydrationState();
+          break;
+
+        case HostComponent:
+          pushHostContext(workInProgress);
+
+          if (workInProgress.mode & ConcurrentMode && renderExpirationTime !== Never && shouldDeprioritizeSubtree(workInProgress.type, newProps)) {
+            {
+              markSpawnedWork(Never);
+            } // Schedule this fiber to re-render at offscreen priority. Then bailout.
+
+
+            workInProgress.expirationTime = workInProgress.childExpirationTime = Never;
+            return null;
+          }
+
+          break;
+
+        case ClassComponent:
+          {
+            var Component = workInProgress.type;
+
+            if (isContextProvider(Component)) {
+              pushContextProvider(workInProgress);
+            }
+
+            break;
+          }
+
+        case HostPortal:
+          pushHostContainer(workInProgress, workInProgress.stateNode.containerInfo);
+          break;
+
+        case ContextProvider:
+          {
+            var newValue = workInProgress.memoizedProps.value;
+            pushProvider(workInProgress, newValue);
+            break;
+          }
+
+        case Profiler:
+          {
+            // Profiler should only call onRender when one of its descendants actually rendered.
+            var hasChildWork = workInProgress.childExpirationTime >= renderExpirationTime;
+
+            if (hasChildWork) {
+              workInProgress.effectTag |= Update;
+            }
+          }
+
+          break;
+
+        case SuspenseComponent:
+          {
+            var state = workInProgress.memoizedState;
+
+            if (state !== null) {
+              // whether to retry the primary children, or to skip over it and
+              // go straight to the fallback. Check the priority of the primary
+              // child fragment.
+
+
+              var primaryChildFragment = workInProgress.child;
+              var primaryChildExpirationTime = primaryChildFragment.childExpirationTime;
+
+              if (primaryChildExpirationTime !== NoWork && primaryChildExpirationTime >= renderExpirationTime) {
+                // The primary children have pending work. Use the normal path
+                // to attempt to render the primary children again.
+                return updateSuspenseComponent(current, workInProgress, renderExpirationTime);
+              } else {
+                pushSuspenseContext(workInProgress, setDefaultShallowSuspenseContext(suspenseStackCursor.current)); // The primary children do not have pending work with sufficient
+                // priority. Bailout.
+
+                var child = bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+
+                if (child !== null) {
+                  // The fallback children have pending work. Skip over the
+                  // primary children and work on the fallback.
+                  return child.sibling;
+                } else {
+                  return null;
+                }
+              }
+            } else {
+              pushSuspenseContext(workInProgress, setDefaultShallowSuspenseContext(suspenseStackCursor.current));
+            }
+
+            break;
+          }
+
+        case SuspenseListComponent:
+          {
+            var didSuspendBefore = (current.effectTag & DidCapture) !== NoEffect;
+
+            var _hasChildWork = workInProgress.childExpirationTime >= renderExpirationTime;
+
+            if (didSuspendBefore) {
+              if (_hasChildWork) {
+                // If something was in fallback state last time, and we have all the
+                // same children then we're still in progressive loading state.
+                // Something might get unblocked by state updates or retries in the
+                // tree which will affect the tail. So we need to use the normal
+                // path to compute the correct tail.
+                return updateSuspenseListComponent(current, workInProgress, renderExpirationTime);
+              } // If none of the children had any work, that means that none of
+              // them got retried so they'll still be blocked in the same way
+              // as before. We can fast bail out.
+
+
+              workInProgress.effectTag |= DidCapture;
+            } // If nothing suspended before and we're rendering the same children,
+            // then the tail doesn't matter. Anything new that suspends will work
+            // in the "together" mode, so we can continue from the state we had.
+
+
+            var renderState = workInProgress.memoizedState;
+
+            if (renderState !== null) {
+              // Reset to the "together" mode in case we've started a different
+              // update in the past but didn't complete it.
+              renderState.rendering = null;
+              renderState.tail = null;
+            }
+
+            pushSuspenseContext(workInProgress, suspenseStackCursor.current);
+
+            if (_hasChildWork) {
+              break;
+            } else {
+              // If none of the children had any work, that means that none of
+              // them got retried so they'll still be blocked in the same way
+              // as before. We can fast bail out.
+              return null;
+            }
+          }
+      }
+
+      return bailoutOnAlreadyFinishedWork(current, workInProgress, renderExpirationTime);
+    } else {
+      // An update was scheduled on this fiber, but there are no new props
+      // nor legacy context. Set this to false. If an update queue or context
+      // consumer produces a changed value, it will set this to true. Otherwise,
+      // the component will assume the children have not changed and bail out.
+      didReceiveUpdate = false;
+    }
+  } else {
+    didReceiveUpdate = false;
+  } // Before entering the begin phase, clear pending update priority.
+  // TODO: This assumes that we're about to evaluate the component and process
+  // the update queue. However, there's an exception: SimpleMemoComponent
+  // sometimes bails out later in the begin phase. This indicates that we should
+  // move this assignment out of the common path and into each branch.
+
+
+  workInProgress.expirationTime = NoWork;
+
+  switch (workInProgress.tag) {
+    case IndeterminateComponent:
+      {
+        return mountIndeterminateComponent(current, workInProgress, workInProgress.type, renderExpirationTime);
+      }
+
+    case LazyComponent:
+      {
+        var elementType = workInProgress.elementType;
+        return mountLazyComponent(current, workInProgress, elementType, updateExpirationTime, renderExpirationTime);
+      }
+
+    case FunctionComponent:
+      {
+        var _Component = workInProgress.type;
+        var unresolvedProps = workInProgress.pendingProps;
+        var resolvedProps = workInProgress.elementType === _Component ? unresolvedProps : resolveDefaultProps(_Component, unresolvedProps);
+        return updateFunctionComponent(current, workInProgress, _Component, resolvedProps, renderExpirationTime);
+      }
+
+    case ClassComponent:
+      {
+        var _Component2 = workInProgress.type;
+        var _unresolvedProps = workInProgress.pendingProps;
+
+        var _resolvedProps = workInProgress.elementType === _Component2 ? _unresolvedProps : resolveDefaultProps(_Component2, _unresolvedProps);
+
+        return updateClassComponent(current, workInProgress, _Component2, _resolvedProps, renderExpirationTime);
+      }
+
+    case HostRoot:
+      return updateHostRoot(current, workInProgress, renderExpirationTime);
+
+    case HostComponent:
+      return updateHostComponent(current, workInProgress, renderExpirationTime);
+
+    case HostText:
+      return updateHostText(current, workInProgress);
+
+    case SuspenseComponent:
+      return updateSuspenseComponent(current, workInProgress, renderExpirationTime);
+
+    case 
