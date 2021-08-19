@@ -65474,4 +65474,248 @@ function completeWork(current, workInProgress, renderExpirationTime) {
         return null;
       }
 
-    case HostCompo
+    case HostComponent:
+      {
+        popHostContext(workInProgress);
+        var rootContainerInstance = getRootHostContainer();
+        var type = workInProgress.type;
+
+        if (current !== null && workInProgress.stateNode != null) {
+          updateHostComponent$1(current, workInProgress, type, newProps, rootContainerInstance);
+
+          if (current.ref !== workInProgress.ref) {
+            markRef$1(workInProgress);
+          }
+        } else {
+          if (!newProps) {
+            if (!(workInProgress.stateNode !== null)) {
+              {
+                throw Error( "We must have new props for new mounts. This error is likely caused by a bug in React. Please file an issue." );
+              }
+            } // This can happen when we abort work.
+
+
+            return null;
+          }
+
+          var currentHostContext = getHostContext(); // TODO: Move createInstance to beginWork and keep it on a context
+          // "stack" as the parent. Then append children as we go in beginWork
+          // or completeWork depending on whether we want to add them top->down or
+          // bottom->up. Top->down is faster in IE11.
+
+          var _wasHydrated = popHydrationState(workInProgress);
+
+          if (_wasHydrated) {
+            // TODO: Move this and createInstance step into the beginPhase
+            // to consolidate.
+            if (prepareToHydrateHostInstance(workInProgress, rootContainerInstance, currentHostContext)) {
+              // If changes to the hydrated node need to be applied at the
+              // commit-phase we mark this as such.
+              markUpdate(workInProgress);
+            }
+          } else {
+            var instance = createInstance(type, newProps, rootContainerInstance, currentHostContext, workInProgress);
+            appendAllChildren(instance, workInProgress, false, false); // This needs to be set before we mount Flare event listeners
+
+            workInProgress.stateNode = instance;
+            // (eg DOM renderer supports auto-focus for certain elements).
+            // Make sure such renderers get scheduled for later work.
+
+
+            if (finalizeInitialChildren(instance, type, newProps, rootContainerInstance)) {
+              markUpdate(workInProgress);
+            }
+          }
+
+          if (workInProgress.ref !== null) {
+            // If there is a ref on a host node we need to schedule a callback
+            markRef$1(workInProgress);
+          }
+        }
+
+        return null;
+      }
+
+    case HostText:
+      {
+        var newText = newProps;
+
+        if (current && workInProgress.stateNode != null) {
+          var oldText = current.memoizedProps; // If we have an alternate, that means this is an update and we need
+          // to schedule a side-effect to do the updates.
+
+          updateHostText$1(current, workInProgress, oldText, newText);
+        } else {
+          if (typeof newText !== 'string') {
+            if (!(workInProgress.stateNode !== null)) {
+              {
+                throw Error( "We must have new props for new mounts. This error is likely caused by a bug in React. Please file an issue." );
+              }
+            } // This can happen when we abort work.
+
+          }
+
+          var _rootContainerInstance = getRootHostContainer();
+
+          var _currentHostContext = getHostContext();
+
+          var _wasHydrated2 = popHydrationState(workInProgress);
+
+          if (_wasHydrated2) {
+            if (prepareToHydrateHostTextInstance(workInProgress)) {
+              markUpdate(workInProgress);
+            }
+          } else {
+            workInProgress.stateNode = createTextInstance(newText, _rootContainerInstance, _currentHostContext, workInProgress);
+          }
+        }
+
+        return null;
+      }
+
+    case SuspenseComponent:
+      {
+        popSuspenseContext(workInProgress);
+        var nextState = workInProgress.memoizedState;
+
+        if ((workInProgress.effectTag & DidCapture) !== NoEffect) {
+          // Something suspended. Re-render with the fallback children.
+          workInProgress.expirationTime = renderExpirationTime; // Do not reset the effect list.
+
+          return workInProgress;
+        }
+
+        var nextDidTimeout = nextState !== null;
+        var prevDidTimeout = false;
+
+        if (current === null) {
+          if (workInProgress.memoizedProps.fallback !== undefined) {
+            popHydrationState(workInProgress);
+          }
+        } else {
+          var prevState = current.memoizedState;
+          prevDidTimeout = prevState !== null;
+
+          if (!nextDidTimeout && prevState !== null) {
+            // We just switched from the fallback to the normal children.
+            // Delete the fallback.
+            // TODO: Would it be better to store the fallback fragment on
+            // the stateNode during the begin phase?
+            var currentFallbackChild = current.child.sibling;
+
+            if (currentFallbackChild !== null) {
+              // Deletions go at the beginning of the return fiber's effect list
+              var first = workInProgress.firstEffect;
+
+              if (first !== null) {
+                workInProgress.firstEffect = currentFallbackChild;
+                currentFallbackChild.nextEffect = first;
+              } else {
+                workInProgress.firstEffect = workInProgress.lastEffect = currentFallbackChild;
+                currentFallbackChild.nextEffect = null;
+              }
+
+              currentFallbackChild.effectTag = Deletion;
+            }
+          }
+        }
+
+        if (nextDidTimeout && !prevDidTimeout) {
+          // If this subtreee is running in blocking mode we can suspend,
+          // otherwise we won't suspend.
+          // TODO: This will still suspend a synchronous tree if anything
+          // in the concurrent tree already suspended during this render.
+          // This is a known bug.
+          if ((workInProgress.mode & BlockingMode) !== NoMode) {
+            // TODO: Move this back to throwException because this is too late
+            // if this is a large tree which is common for initial loads. We
+            // don't know if we should restart a render or not until we get
+            // this marker, and this is too late.
+            // If this render already had a ping or lower pri updates,
+            // and this is the first time we know we're going to suspend we
+            // should be able to immediately restart from within throwException.
+            var hasInvisibleChildContext = current === null && workInProgress.memoizedProps.unstable_avoidThisFallback !== true;
+
+            if (hasInvisibleChildContext || hasSuspenseContext(suspenseStackCursor.current, InvisibleParentSuspenseContext)) {
+              // If this was in an invisible tree or a new render, then showing
+              // this boundary is ok.
+              renderDidSuspend();
+            } else {
+              // Otherwise, we're going to have to hide content so we should
+              // suspend for longer if possible.
+              renderDidSuspendDelayIfPossible();
+            }
+          }
+        }
+
+        {
+          // TODO: Only schedule updates if these values are non equal, i.e. it changed.
+          if (nextDidTimeout || prevDidTimeout) {
+            // If this boundary just timed out, schedule an effect to attach a
+            // retry listener to the promise. This flag is also used to hide the
+            // primary children. In mutation mode, we also need the flag to
+            // *unhide* children that were previously hidden, so check if this
+            // is currently timed out, too.
+            workInProgress.effectTag |= Update;
+          }
+        }
+
+        return null;
+      }
+
+    case HostPortal:
+      popHostContainer(workInProgress);
+      updateHostContainer(workInProgress);
+      return null;
+
+    case ContextProvider:
+      // Pop provider fiber
+      popProvider(workInProgress);
+      return null;
+
+    case IncompleteClassComponent:
+      {
+        // Same as class component case. I put it down here so that the tags are
+        // sequential to ensure this switch is compiled to a jump table.
+        var _Component = workInProgress.type;
+
+        if (isContextProvider(_Component)) {
+          popContext(workInProgress);
+        }
+
+        return null;
+      }
+
+    case SuspenseListComponent:
+      {
+        popSuspenseContext(workInProgress);
+        var renderState = workInProgress.memoizedState;
+
+        if (renderState === null) {
+          // We're running in the default, "independent" mode.
+          // We don't do anything in this mode.
+          return null;
+        }
+
+        var didSuspendAlready = (workInProgress.effectTag & DidCapture) !== NoEffect;
+        var renderedTail = renderState.rendering;
+
+        if (renderedTail === null) {
+          // We just rendered the head.
+          if (!didSuspendAlready) {
+            // This is the first pass. We need to figure out if anything is still
+            // suspended in the rendered set.
+            // If new content unsuspended, but there's still some content that
+            // didn't. Then we need to do a second pass that forces everything
+            // to keep showing their fallbacks.
+            // We might be suspended if something in this render pass suspended, or
+            // something in the previous committed pass suspended. Otherwise,
+            // there's no chance so we can skip the expensive call to
+            // findFirstSuspended.
+            var cannotBeSuspended = renderHasNotSuspendedYet() && (current === null || (current.effectTag & DidCapture) === NoEffect);
+
+            if (!cannotBeSuspended) {
+              var row = workInProgress.child;
+
+              while (row !== null) {
+         
