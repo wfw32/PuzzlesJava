@@ -65179,4 +65179,299 @@ function beginWork(current, workInProgress, renderExpirationTime) {
     case SuspenseComponent:
       return updateSuspenseComponent(current, workInProgress, renderExpirationTime);
 
-    case 
+    case HostPortal:
+      return updatePortalComponent(current, workInProgress, renderExpirationTime);
+
+    case ForwardRef:
+      {
+        var type = workInProgress.type;
+        var _unresolvedProps2 = workInProgress.pendingProps;
+
+        var _resolvedProps2 = workInProgress.elementType === type ? _unresolvedProps2 : resolveDefaultProps(type, _unresolvedProps2);
+
+        return updateForwardRef(current, workInProgress, type, _resolvedProps2, renderExpirationTime);
+      }
+
+    case Fragment:
+      return updateFragment(current, workInProgress, renderExpirationTime);
+
+    case Mode:
+      return updateMode(current, workInProgress, renderExpirationTime);
+
+    case Profiler:
+      return updateProfiler(current, workInProgress, renderExpirationTime);
+
+    case ContextProvider:
+      return updateContextProvider(current, workInProgress, renderExpirationTime);
+
+    case ContextConsumer:
+      return updateContextConsumer(current, workInProgress, renderExpirationTime);
+
+    case MemoComponent:
+      {
+        var _type2 = workInProgress.type;
+        var _unresolvedProps3 = workInProgress.pendingProps; // Resolve outer props first, then resolve inner props.
+
+        var _resolvedProps3 = resolveDefaultProps(_type2, _unresolvedProps3);
+
+        {
+          if (workInProgress.type !== workInProgress.elementType) {
+            var outerPropTypes = _type2.propTypes;
+
+            if (outerPropTypes) {
+              checkPropTypes(outerPropTypes, _resolvedProps3, // Resolved for outer only
+              'prop', getComponentName(_type2), getCurrentFiberStackInDev);
+            }
+          }
+        }
+
+        _resolvedProps3 = resolveDefaultProps(_type2.type, _resolvedProps3);
+        return updateMemoComponent(current, workInProgress, _type2, _resolvedProps3, updateExpirationTime, renderExpirationTime);
+      }
+
+    case SimpleMemoComponent:
+      {
+        return updateSimpleMemoComponent(current, workInProgress, workInProgress.type, workInProgress.pendingProps, updateExpirationTime, renderExpirationTime);
+      }
+
+    case IncompleteClassComponent:
+      {
+        var _Component3 = workInProgress.type;
+        var _unresolvedProps4 = workInProgress.pendingProps;
+
+        var _resolvedProps4 = workInProgress.elementType === _Component3 ? _unresolvedProps4 : resolveDefaultProps(_Component3, _unresolvedProps4);
+
+        return mountIncompleteClassComponent(current, workInProgress, _Component3, _resolvedProps4, renderExpirationTime);
+      }
+
+    case SuspenseListComponent:
+      {
+        return updateSuspenseListComponent(current, workInProgress, renderExpirationTime);
+      }
+  }
+
+  {
+    {
+      throw Error( "Unknown unit of work tag (" + workInProgress.tag + "). This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+}
+
+function markUpdate(workInProgress) {
+  // Tag the fiber with an update effect. This turns a Placement into
+  // a PlacementAndUpdate.
+  workInProgress.effectTag |= Update;
+}
+
+function markRef$1(workInProgress) {
+  workInProgress.effectTag |= Ref;
+}
+
+var appendAllChildren;
+var updateHostContainer;
+var updateHostComponent$1;
+var updateHostText$1;
+
+{
+  // Mutation mode
+  appendAllChildren = function (parent, workInProgress, needsVisibilityToggle, isHidden) {
+    // We only have the top Fiber that was created but we need recurse down its
+    // children to find all the terminal nodes.
+    var node = workInProgress.child;
+
+    while (node !== null) {
+      if (node.tag === HostComponent || node.tag === HostText) {
+        appendInitialChild(parent, node.stateNode);
+      } else if (node.tag === HostPortal) ; else if (node.child !== null) {
+        node.child.return = node;
+        node = node.child;
+        continue;
+      }
+
+      if (node === workInProgress) {
+        return;
+      }
+
+      while (node.sibling === null) {
+        if (node.return === null || node.return === workInProgress) {
+          return;
+        }
+
+        node = node.return;
+      }
+
+      node.sibling.return = node.return;
+      node = node.sibling;
+    }
+  };
+
+  updateHostContainer = function (workInProgress) {// Noop
+  };
+
+  updateHostComponent$1 = function (current, workInProgress, type, newProps, rootContainerInstance) {
+    // If we have an alternate, that means this is an update and we need to
+    // schedule a side-effect to do the updates.
+    var oldProps = current.memoizedProps;
+
+    if (oldProps === newProps) {
+      // In mutation mode, this is sufficient for a bailout because
+      // we won't touch this node even if children changed.
+      return;
+    } // If we get updated because one of our children updated, we don't
+    // have newProps so we'll have to reuse them.
+    // TODO: Split the update API as separate for the props vs. children.
+    // Even better would be if children weren't special cased at all tho.
+
+
+    var instance = workInProgress.stateNode;
+    var currentHostContext = getHostContext(); // TODO: Experiencing an error where oldProps is null. Suggests a host
+    // component is hitting the resume path. Figure out why. Possibly
+    // related to `hidden`.
+
+    var updatePayload = prepareUpdate(instance, type, oldProps, newProps, rootContainerInstance, currentHostContext); // TODO: Type this specific to this type of component.
+
+    workInProgress.updateQueue = updatePayload; // If the update payload indicates that there is a change or if there
+    // is a new ref we mark this as an update. All the work is done in commitWork.
+
+    if (updatePayload) {
+      markUpdate(workInProgress);
+    }
+  };
+
+  updateHostText$1 = function (current, workInProgress, oldText, newText) {
+    // If the text differs, mark it as an update. All the work in done in commitWork.
+    if (oldText !== newText) {
+      markUpdate(workInProgress);
+    }
+  };
+}
+
+function cutOffTailIfNeeded(renderState, hasRenderedATailFallback) {
+  switch (renderState.tailMode) {
+    case 'hidden':
+      {
+        // Any insertions at the end of the tail list after this point
+        // should be invisible. If there are already mounted boundaries
+        // anything before them are not considered for collapsing.
+        // Therefore we need to go through the whole tail to find if
+        // there are any.
+        var tailNode = renderState.tail;
+        var lastTailNode = null;
+
+        while (tailNode !== null) {
+          if (tailNode.alternate !== null) {
+            lastTailNode = tailNode;
+          }
+
+          tailNode = tailNode.sibling;
+        } // Next we're simply going to delete all insertions after the
+        // last rendered item.
+
+
+        if (lastTailNode === null) {
+          // All remaining items in the tail are insertions.
+          renderState.tail = null;
+        } else {
+          // Detach the insertion after the last node that was already
+          // inserted.
+          lastTailNode.sibling = null;
+        }
+
+        break;
+      }
+
+    case 'collapsed':
+      {
+        // Any insertions at the end of the tail list after this point
+        // should be invisible. If there are already mounted boundaries
+        // anything before them are not considered for collapsing.
+        // Therefore we need to go through the whole tail to find if
+        // there are any.
+        var _tailNode = renderState.tail;
+        var _lastTailNode = null;
+
+        while (_tailNode !== null) {
+          if (_tailNode.alternate !== null) {
+            _lastTailNode = _tailNode;
+          }
+
+          _tailNode = _tailNode.sibling;
+        } // Next we're simply going to delete all insertions after the
+        // last rendered item.
+
+
+        if (_lastTailNode === null) {
+          // All remaining items in the tail are insertions.
+          if (!hasRenderedATailFallback && renderState.tail !== null) {
+            // We suspended during the head. We want to show at least one
+            // row at the tail. So we'll keep on and cut off the rest.
+            renderState.tail.sibling = null;
+          } else {
+            renderState.tail = null;
+          }
+        } else {
+          // Detach the insertion after the last node that was already
+          // inserted.
+          _lastTailNode.sibling = null;
+        }
+
+        break;
+      }
+  }
+}
+
+function completeWork(current, workInProgress, renderExpirationTime) {
+  var newProps = workInProgress.pendingProps;
+
+  switch (workInProgress.tag) {
+    case IndeterminateComponent:
+    case LazyComponent:
+    case SimpleMemoComponent:
+    case FunctionComponent:
+    case ForwardRef:
+    case Fragment:
+    case Mode:
+    case Profiler:
+    case ContextConsumer:
+    case MemoComponent:
+      return null;
+
+    case ClassComponent:
+      {
+        var Component = workInProgress.type;
+
+        if (isContextProvider(Component)) {
+          popContext(workInProgress);
+        }
+
+        return null;
+      }
+
+    case HostRoot:
+      {
+        popHostContainer(workInProgress);
+        popTopLevelContextObject(workInProgress);
+        var fiberRoot = workInProgress.stateNode;
+
+        if (fiberRoot.pendingContext) {
+          fiberRoot.context = fiberRoot.pendingContext;
+          fiberRoot.pendingContext = null;
+        }
+
+        if (current === null || current.child === null) {
+          // If we hydrated, pop so that we can delete any remaining children
+          // that weren't hydrated.
+          var wasHydrated = popHydrationState(workInProgress);
+
+          if (wasHydrated) {
+            // If we hydrated, then we'll need to schedule an update for
+            // the commit side-effects on the root.
+            markUpdate(workInProgress);
+          }
+        }
+
+        updateHostContainer(workInProgress);
+        return null;
+      }
+
+    case HostCompo
