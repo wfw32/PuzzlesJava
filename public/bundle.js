@@ -65950,4 +65950,293 @@ function unwindWork(workInProgress, renderExpirationTime) {
 
     case SuspenseListComponent:
       {
-        popSuspenseContext(workInProgress); // SuspenseList doesn't actually catch anything. It should'
+        popSuspenseContext(workInProgress); // SuspenseList doesn't actually catch anything. It should've been
+        // caught by a nested boundary. If not, it should bubble through.
+
+        return null;
+      }
+
+    case HostPortal:
+      popHostContainer(workInProgress);
+      return null;
+
+    case ContextProvider:
+      popProvider(workInProgress);
+      return null;
+
+    default:
+      return null;
+  }
+}
+
+function unwindInterruptedWork(interruptedWork) {
+  switch (interruptedWork.tag) {
+    case ClassComponent:
+      {
+        var childContextTypes = interruptedWork.type.childContextTypes;
+
+        if (childContextTypes !== null && childContextTypes !== undefined) {
+          popContext(interruptedWork);
+        }
+
+        break;
+      }
+
+    case HostRoot:
+      {
+        popHostContainer(interruptedWork);
+        popTopLevelContextObject(interruptedWork);
+        break;
+      }
+
+    case HostComponent:
+      {
+        popHostContext(interruptedWork);
+        break;
+      }
+
+    case HostPortal:
+      popHostContainer(interruptedWork);
+      break;
+
+    case SuspenseComponent:
+      popSuspenseContext(interruptedWork);
+      break;
+
+    case SuspenseListComponent:
+      popSuspenseContext(interruptedWork);
+      break;
+
+    case ContextProvider:
+      popProvider(interruptedWork);
+      break;
+  }
+}
+
+function createCapturedValue(value, source) {
+  // If the value is an error, call this function immediately after it is thrown
+  // so the stack is accurate.
+  return {
+    value: value,
+    source: source,
+    stack: getStackByFiberInDevAndProd(source)
+  };
+}
+
+function logCapturedError(capturedError) {
+
+  var error = capturedError.error;
+
+  {
+    var componentName = capturedError.componentName,
+        componentStack = capturedError.componentStack,
+        errorBoundaryName = capturedError.errorBoundaryName,
+        errorBoundaryFound = capturedError.errorBoundaryFound,
+        willRetry = capturedError.willRetry; // Browsers support silencing uncaught errors by calling
+    // `preventDefault()` in window `error` handler.
+    // We record this information as an expando on the error.
+
+    if (error != null && error._suppressLogging) {
+      if (errorBoundaryFound && willRetry) {
+        // The error is recoverable and was silenced.
+        // Ignore it and don't print the stack addendum.
+        // This is handy for testing error boundaries without noise.
+        return;
+      } // The error is fatal. Since the silencing might have
+      // been accidental, we'll surface it anyway.
+      // However, the browser would have silenced the original error
+      // so we'll print it first, and then print the stack addendum.
+
+
+      console['error'](error); // Don't transform to our wrapper
+      // For a more detailed description of this block, see:
+      // https://github.com/facebook/react/pull/13384
+    }
+
+    var componentNameMessage = componentName ? "The above error occurred in the <" + componentName + "> component:" : 'The above error occurred in one of your React components:';
+    var errorBoundaryMessage; // errorBoundaryFound check is sufficient; errorBoundaryName check is to satisfy Flow.
+
+    if (errorBoundaryFound && errorBoundaryName) {
+      if (willRetry) {
+        errorBoundaryMessage = "React will try to recreate this component tree from scratch " + ("using the error boundary you provided, " + errorBoundaryName + ".");
+      } else {
+        errorBoundaryMessage = "This error was initially handled by the error boundary " + errorBoundaryName + ".\n" + "Recreating the tree from scratch failed so React will unmount the tree.";
+      }
+    } else {
+      errorBoundaryMessage = 'Consider adding an error boundary to your tree to customize error handling behavior.\n' + 'Visit https://fb.me/react-error-boundaries to learn more about error boundaries.';
+    }
+
+    var combinedMessage = "" + componentNameMessage + componentStack + "\n\n" + ("" + errorBoundaryMessage); // In development, we provide our own message with just the component stack.
+    // We don't include the original error message and JS stack because the browser
+    // has already printed it. Even if the application swallows the error, it is still
+    // displayed by the browser thanks to the DEV-only fake event trick in ReactErrorUtils.
+
+    console['error'](combinedMessage); // Don't transform to our wrapper
+  }
+}
+
+var didWarnAboutUndefinedSnapshotBeforeUpdate = null;
+
+{
+  didWarnAboutUndefinedSnapshotBeforeUpdate = new Set();
+}
+
+var PossiblyWeakSet = typeof WeakSet === 'function' ? WeakSet : Set;
+function logError(boundary, errorInfo) {
+  var source = errorInfo.source;
+  var stack = errorInfo.stack;
+
+  if (stack === null && source !== null) {
+    stack = getStackByFiberInDevAndProd(source);
+  }
+
+  var capturedError = {
+    componentName: source !== null ? getComponentName(source.type) : null,
+    componentStack: stack !== null ? stack : '',
+    error: errorInfo.value,
+    errorBoundary: null,
+    errorBoundaryName: null,
+    errorBoundaryFound: false,
+    willRetry: false
+  };
+
+  if (boundary !== null && boundary.tag === ClassComponent) {
+    capturedError.errorBoundary = boundary.stateNode;
+    capturedError.errorBoundaryName = getComponentName(boundary.type);
+    capturedError.errorBoundaryFound = true;
+    capturedError.willRetry = true;
+  }
+
+  try {
+    logCapturedError(capturedError);
+  } catch (e) {
+    // This method must not throw, or React internal state will get messed up.
+    // If console.error is overridden, or logCapturedError() shows a dialog that throws,
+    // we want to report this error outside of the normal stack as a last resort.
+    // https://github.com/facebook/react/issues/13188
+    setTimeout(function () {
+      throw e;
+    });
+  }
+}
+
+var callComponentWillUnmountWithTimer = function (current, instance) {
+  startPhaseTimer(current, 'componentWillUnmount');
+  instance.props = current.memoizedProps;
+  instance.state = current.memoizedState;
+  instance.componentWillUnmount();
+  stopPhaseTimer();
+}; // Capture errors so they don't interrupt unmounting.
+
+
+function safelyCallComponentWillUnmount(current, instance) {
+  {
+    invokeGuardedCallback(null, callComponentWillUnmountWithTimer, null, current, instance);
+
+    if (hasCaughtError()) {
+      var unmountError = clearCaughtError();
+      captureCommitPhaseError(current, unmountError);
+    }
+  }
+}
+
+function safelyDetachRef(current) {
+  var ref = current.ref;
+
+  if (ref !== null) {
+    if (typeof ref === 'function') {
+      {
+        invokeGuardedCallback(null, ref, null, null);
+
+        if (hasCaughtError()) {
+          var refError = clearCaughtError();
+          captureCommitPhaseError(current, refError);
+        }
+      }
+    } else {
+      ref.current = null;
+    }
+  }
+}
+
+function safelyCallDestroy(current, destroy) {
+  {
+    invokeGuardedCallback(null, destroy, null);
+
+    if (hasCaughtError()) {
+      var error = clearCaughtError();
+      captureCommitPhaseError(current, error);
+    }
+  }
+}
+
+function commitBeforeMutationLifeCycles(current, finishedWork) {
+  switch (finishedWork.tag) {
+    case FunctionComponent:
+    case ForwardRef:
+    case SimpleMemoComponent:
+    case Block:
+      {
+        return;
+      }
+
+    case ClassComponent:
+      {
+        if (finishedWork.effectTag & Snapshot) {
+          if (current !== null) {
+            var prevProps = current.memoizedProps;
+            var prevState = current.memoizedState;
+            startPhaseTimer(finishedWork, 'getSnapshotBeforeUpdate');
+            var instance = finishedWork.stateNode; // We could update instance props and state here,
+            // but instead we rely on them being set during last render.
+            // TODO: revisit this when we implement resuming.
+
+            {
+              if (finishedWork.type === finishedWork.elementType && !didWarnAboutReassigningProps) {
+                if (instance.props !== finishedWork.memoizedProps) {
+                  error('Expected %s props to match memoized props before ' + 'getSnapshotBeforeUpdate. ' + 'This might either be because of a bug in React, or because ' + 'a component reassigns its own `this.props`. ' + 'Please file an issue.', getComponentName(finishedWork.type) || 'instance');
+                }
+
+                if (instance.state !== finishedWork.memoizedState) {
+                  error('Expected %s state to match memoized state before ' + 'getSnapshotBeforeUpdate. ' + 'This might either be because of a bug in React, or because ' + 'a component reassigns its own `this.props`. ' + 'Please file an issue.', getComponentName(finishedWork.type) || 'instance');
+                }
+              }
+            }
+
+            var snapshot = instance.getSnapshotBeforeUpdate(finishedWork.elementType === finishedWork.type ? prevProps : resolveDefaultProps(finishedWork.type, prevProps), prevState);
+
+            {
+              var didWarnSet = didWarnAboutUndefinedSnapshotBeforeUpdate;
+
+              if (snapshot === undefined && !didWarnSet.has(finishedWork.type)) {
+                didWarnSet.add(finishedWork.type);
+
+                error('%s.getSnapshotBeforeUpdate(): A snapshot value (or null) ' + 'must be returned. You have returned undefined.', getComponentName(finishedWork.type));
+              }
+            }
+
+            instance.__reactInternalSnapshotBeforeUpdate = snapshot;
+            stopPhaseTimer();
+          }
+        }
+
+        return;
+      }
+
+    case HostRoot:
+    case HostComponent:
+    case HostText:
+    case HostPortal:
+    case IncompleteClassComponent:
+      // Nothing to do for these component types
+      return;
+  }
+
+  {
+    {
+      throw Error( "This unit of work tag should not have side-effects. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+}
+
+function commitHookEff
