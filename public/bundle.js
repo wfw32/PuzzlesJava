@@ -66469,4 +66469,352 @@ function commitLifeCycles(finishedRoot, current, finishedWork, committedExpirati
           if (typeof onRender === 'function') {
             {
               onRender(finishedWork.memoizedProps.id, current === null ? 'mount' : 'update', finishedWork.actualDuration, finishedWork.treeBaseDuration, finishedWork.actualStartTime, getCommitTime(), finishedRoot.memoizedInteractions);
-       
+            }
+          }
+        }
+
+        return;
+      }
+
+    case SuspenseComponent:
+      {
+        commitSuspenseHydrationCallbacks(finishedRoot, finishedWork);
+        return;
+      }
+
+    case SuspenseListComponent:
+    case IncompleteClassComponent:
+    case FundamentalComponent:
+    case ScopeComponent:
+      return;
+  }
+
+  {
+    {
+      throw Error( "This unit of work tag should not have side-effects. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+}
+
+function hideOrUnhideAllChildren(finishedWork, isHidden) {
+  {
+    // We only have the top Fiber that was inserted but we need to recurse down its
+    // children to find all the terminal nodes.
+    var node = finishedWork;
+
+    while (true) {
+      if (node.tag === HostComponent) {
+        var instance = node.stateNode;
+
+        if (isHidden) {
+          hideInstance(instance);
+        } else {
+          unhideInstance(node.stateNode, node.memoizedProps);
+        }
+      } else if (node.tag === HostText) {
+        var _instance3 = node.stateNode;
+
+        if (isHidden) {
+          hideTextInstance(_instance3);
+        } else {
+          unhideTextInstance(_instance3, node.memoizedProps);
+        }
+      } else if (node.tag === SuspenseComponent && node.memoizedState !== null && node.memoizedState.dehydrated === null) {
+        // Found a nested Suspense component that timed out. Skip over the
+        // primary child fragment, which should remain hidden.
+        var fallbackChildFragment = node.child.sibling;
+        fallbackChildFragment.return = node;
+        node = fallbackChildFragment;
+        continue;
+      } else if (node.child !== null) {
+        node.child.return = node;
+        node = node.child;
+        continue;
+      }
+
+      if (node === finishedWork) {
+        return;
+      }
+
+      while (node.sibling === null) {
+        if (node.return === null || node.return === finishedWork) {
+          return;
+        }
+
+        node = node.return;
+      }
+
+      node.sibling.return = node.return;
+      node = node.sibling;
+    }
+  }
+}
+
+function commitAttachRef(finishedWork) {
+  var ref = finishedWork.ref;
+
+  if (ref !== null) {
+    var instance = finishedWork.stateNode;
+    var instanceToUse;
+
+    switch (finishedWork.tag) {
+      case HostComponent:
+        instanceToUse = getPublicInstance(instance);
+        break;
+
+      default:
+        instanceToUse = instance;
+    } // Moved outside to ensure DCE works with this flag
+
+    if (typeof ref === 'function') {
+      ref(instanceToUse);
+    } else {
+      {
+        if (!ref.hasOwnProperty('current')) {
+          error('Unexpected ref object provided for %s. ' + 'Use either a ref-setter function or React.createRef().%s', getComponentName(finishedWork.type), getStackByFiberInDevAndProd(finishedWork));
+        }
+      }
+
+      ref.current = instanceToUse;
+    }
+  }
+}
+
+function commitDetachRef(current) {
+  var currentRef = current.ref;
+
+  if (currentRef !== null) {
+    if (typeof currentRef === 'function') {
+      currentRef(null);
+    } else {
+      currentRef.current = null;
+    }
+  }
+} // User-originating errors (lifecycles and refs) should not interrupt
+// deletion, so don't let them throw. Host-originating errors should
+// interrupt deletion, so it's okay
+
+
+function commitUnmount(finishedRoot, current, renderPriorityLevel) {
+  onCommitUnmount(current);
+
+  switch (current.tag) {
+    case FunctionComponent:
+    case ForwardRef:
+    case MemoComponent:
+    case SimpleMemoComponent:
+    case Block:
+      {
+        var updateQueue = current.updateQueue;
+
+        if (updateQueue !== null) {
+          var lastEffect = updateQueue.lastEffect;
+
+          if (lastEffect !== null) {
+            var firstEffect = lastEffect.next;
+
+            {
+              // When the owner fiber is deleted, the destroy function of a passive
+              // effect hook is called during the synchronous commit phase. This is
+              // a concession to implementation complexity. Calling it in the
+              // passive effect phase (like they usually are, when dependencies
+              // change during an update) would require either traversing the
+              // children of the deleted fiber again, or including unmount effects
+              // as part of the fiber effect list.
+              //
+              // Because this is during the sync commit phase, we need to change
+              // the priority.
+              //
+              // TODO: Reconsider this implementation trade off.
+              var priorityLevel = renderPriorityLevel > NormalPriority ? NormalPriority : renderPriorityLevel;
+              runWithPriority$1(priorityLevel, function () {
+                var effect = firstEffect;
+
+                do {
+                  var _destroy = effect.destroy;
+
+                  if (_destroy !== undefined) {
+                    safelyCallDestroy(current, _destroy);
+                  }
+
+                  effect = effect.next;
+                } while (effect !== firstEffect);
+              });
+            }
+          }
+        }
+
+        return;
+      }
+
+    case ClassComponent:
+      {
+        safelyDetachRef(current);
+        var instance = current.stateNode;
+
+        if (typeof instance.componentWillUnmount === 'function') {
+          safelyCallComponentWillUnmount(current, instance);
+        }
+
+        return;
+      }
+
+    case HostComponent:
+      {
+
+        safelyDetachRef(current);
+        return;
+      }
+
+    case HostPortal:
+      {
+        // TODO: this is recursive.
+        // We are also not using this parent because
+        // the portal will get pushed immediately.
+        {
+          unmountHostComponents(finishedRoot, current, renderPriorityLevel);
+        }
+
+        return;
+      }
+
+    case FundamentalComponent:
+      {
+
+        return;
+      }
+
+    case DehydratedFragment:
+      {
+
+        return;
+      }
+
+    case ScopeComponent:
+      {
+
+        return;
+      }
+  }
+}
+
+function commitNestedUnmounts(finishedRoot, root, renderPriorityLevel) {
+  // While we're inside a removed host node we don't want to call
+  // removeChild on the inner nodes because they're removed by the top
+  // call anyway. We also want to call componentWillUnmount on all
+  // composites before this host node is removed from the tree. Therefore
+  // we do an inner loop while we're still inside the host node.
+  var node = root;
+
+  while (true) {
+    commitUnmount(finishedRoot, node, renderPriorityLevel); // Visit children because they may contain more composite or host nodes.
+    // Skip portals because commitUnmount() currently visits them recursively.
+
+    if (node.child !== null && ( // If we use mutation we drill down into portals using commitUnmount above.
+    // If we don't use mutation we drill down into portals here instead.
+     node.tag !== HostPortal)) {
+      node.child.return = node;
+      node = node.child;
+      continue;
+    }
+
+    if (node === root) {
+      return;
+    }
+
+    while (node.sibling === null) {
+      if (node.return === null || node.return === root) {
+        return;
+      }
+
+      node = node.return;
+    }
+
+    node.sibling.return = node.return;
+    node = node.sibling;
+  }
+}
+
+function detachFiber(current) {
+  var alternate = current.alternate; // Cut off the return pointers to disconnect it from the tree. Ideally, we
+  // should clear the child pointer of the parent alternate to let this
+  // get GC:ed but we don't know which for sure which parent is the current
+  // one so we'll settle for GC:ing the subtree of this child. This child
+  // itself will be GC:ed when the parent updates the next time.
+
+  current.return = null;
+  current.child = null;
+  current.memoizedState = null;
+  current.updateQueue = null;
+  current.dependencies = null;
+  current.alternate = null;
+  current.firstEffect = null;
+  current.lastEffect = null;
+  current.pendingProps = null;
+  current.memoizedProps = null;
+  current.stateNode = null;
+
+  if (alternate !== null) {
+    detachFiber(alternate);
+  }
+}
+
+function getHostParentFiber(fiber) {
+  var parent = fiber.return;
+
+  while (parent !== null) {
+    if (isHostParent(parent)) {
+      return parent;
+    }
+
+    parent = parent.return;
+  }
+
+  {
+    {
+      throw Error( "Expected to find a host parent. This error is likely caused by a bug in React. Please file an issue." );
+    }
+  }
+}
+
+function isHostParent(fiber) {
+  return fiber.tag === HostComponent || fiber.tag === HostRoot || fiber.tag === HostPortal;
+}
+
+function getHostSibling(fiber) {
+  // We're going to search forward into the tree until we find a sibling host
+  // node. Unfortunately, if multiple insertions are done in a row we have to
+  // search past them. This leads to exponential search for the next sibling.
+  // TODO: Find a more efficient way to do this.
+  var node = fiber;
+
+  siblings: while (true) {
+    // If we didn't find anything, let's try the next sibling.
+    while (node.sibling === null) {
+      if (node.return === null || isHostParent(node.return)) {
+        // If we pop out of the root or hit the parent the fiber we are the
+        // last sibling.
+        return null;
+      }
+
+      node = node.return;
+    }
+
+    node.sibling.return = node.return;
+    node = node.sibling;
+
+    while (node.tag !== HostComponent && node.tag !== HostText && node.tag !== DehydratedFragment) {
+      // If it is not host node and, we might have a host node inside it.
+      // Try to search down until we find one.
+      if (node.effectTag & Placement) {
+        // If we don't have a child, try the siblings instead.
+        continue siblings;
+      } // If we don't have a child, try the siblings instead.
+      // We also skip portals because they are not part of this host tree.
+
+
+      if (node.child === null || node.tag === HostPortal) {
+        continue siblings;
+      } else {
+        node.child.return = node;
+   
