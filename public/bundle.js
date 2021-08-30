@@ -67421,4 +67421,235 @@ function throwException(root, returnFiber, sourceFiber, value, renderExpirationT
               enqueueUpdate(sourceFiber, update);
             }
           } // The source fiber did not complete. Mark it with Sync priority to
-    
+          // indicate that it still has pending work.
+
+
+          sourceFiber.expirationTime = Sync; // Exit without suspending.
+
+          return;
+        } // Confirmed that the boundary is in a concurrent mode tree. Continue
+        // with the normal suspend path.
+        //
+        // After this we'll use a set of heuristics to determine whether this
+        // render pass will run to completion or restart or "suspend" the commit.
+        // The actual logic for this is spread out in different places.
+        //
+        // This first principle is that if we're going to suspend when we complete
+        // a root, then we should also restart if we get an update or ping that
+        // might unsuspend it, and vice versa. The only reason to suspend is
+        // because you think you might want to restart before committing. However,
+        // it doesn't make sense to restart only while in the period we're suspended.
+        //
+        // Restarting too aggressively is also not good because it starves out any
+        // intermediate loading state. So we use heuristics to determine when.
+        // Suspense Heuristics
+        //
+        // If nothing threw a Promise or all the same fallbacks are already showing,
+        // then don't suspend/restart.
+        //
+        // If this is an initial render of a new tree of Suspense boundaries and
+        // those trigger a fallback, then don't suspend/restart. We want to ensure
+        // that we can show the initial loading state as quickly as possible.
+        //
+        // If we hit a "Delayed" case, such as when we'd switch from content back into
+        // a fallback, then we should always suspend/restart. SuspenseConfig applies to
+        // this case. If none is defined, JND is used instead.
+        //
+        // If we're already showing a fallback and it gets "retried", allowing us to show
+        // another level, but there's still an inner boundary that would show a fallback,
+        // then we suspend/restart for 500ms since the last time we showed a fallback
+        // anywhere in the tree. This effectively throttles progressive loading into a
+        // consistent train of commits. This also gives us an opportunity to restart to
+        // get to the completed state slightly earlier.
+        //
+        // If there's ambiguity due to batching it's resolved in preference of:
+        // 1) "delayed", 2) "initial render", 3) "retry".
+        //
+        // We want to ensure that a "busy" state doesn't get force committed. We want to
+        // ensure that new initial loading states can commit as soon as possible.
+
+
+        attachPingListener(root, renderExpirationTime, thenable);
+        _workInProgress.effectTag |= ShouldCapture;
+        _workInProgress.expirationTime = renderExpirationTime;
+        return;
+      } // This boundary already captured during this render. Continue to the next
+      // boundary.
+
+
+      _workInProgress = _workInProgress.return;
+    } while (_workInProgress !== null); // No boundary was found. Fallthrough to error mode.
+    // TODO: Use invariant so the message is stripped in prod?
+
+
+    value = new Error((getComponentName(sourceFiber.type) || 'A React component') + ' suspended while rendering, but no fallback UI was specified.\n' + '\n' + 'Add a <Suspense fallback=...> component higher in the tree to ' + 'provide a loading indicator or placeholder to display.' + getStackByFiberInDevAndProd(sourceFiber));
+  } // We didn't find a boundary that could handle this type of exception. Start
+  // over and traverse parent path again, this time treating the exception
+  // as an error.
+
+
+  renderDidError();
+  value = createCapturedValue(value, sourceFiber);
+  var workInProgress = returnFiber;
+
+  do {
+    switch (workInProgress.tag) {
+      case HostRoot:
+        {
+          var _errorInfo = value;
+          workInProgress.effectTag |= ShouldCapture;
+          workInProgress.expirationTime = renderExpirationTime;
+
+          var _update = createRootErrorUpdate(workInProgress, _errorInfo, renderExpirationTime);
+
+          enqueueCapturedUpdate(workInProgress, _update);
+          return;
+        }
+
+      case ClassComponent:
+        // Capture and retry
+        var errorInfo = value;
+        var ctor = workInProgress.type;
+        var instance = workInProgress.stateNode;
+
+        if ((workInProgress.effectTag & DidCapture) === NoEffect && (typeof ctor.getDerivedStateFromError === 'function' || instance !== null && typeof instance.componentDidCatch === 'function' && !isAlreadyFailedLegacyErrorBoundary(instance))) {
+          workInProgress.effectTag |= ShouldCapture;
+          workInProgress.expirationTime = renderExpirationTime; // Schedule the error boundary to re-render using updated state
+
+          var _update2 = createClassErrorUpdate(workInProgress, errorInfo, renderExpirationTime);
+
+          enqueueCapturedUpdate(workInProgress, _update2);
+          return;
+        }
+
+        break;
+    }
+
+    workInProgress = workInProgress.return;
+  } while (workInProgress !== null);
+}
+
+var ceil = Math.ceil;
+var ReactCurrentDispatcher$1 = ReactSharedInternals.ReactCurrentDispatcher,
+    ReactCurrentOwner$2 = ReactSharedInternals.ReactCurrentOwner,
+    IsSomeRendererActing = ReactSharedInternals.IsSomeRendererActing;
+var NoContext =
+/*                    */
+0;
+var BatchedContext =
+/*               */
+1;
+var EventContext =
+/*                 */
+2;
+var DiscreteEventContext =
+/*         */
+4;
+var LegacyUnbatchedContext =
+/*       */
+8;
+var RenderContext =
+/*                */
+16;
+var CommitContext =
+/*                */
+32;
+var RootIncomplete = 0;
+var RootFatalErrored = 1;
+var RootErrored = 2;
+var RootSuspended = 3;
+var RootSuspendedWithDelay = 4;
+var RootCompleted = 5;
+// Describes where we are in the React execution stack
+var executionContext = NoContext; // The root we're working on
+
+var workInProgressRoot = null; // The fiber we're working on
+
+var workInProgress = null; // The expiration time we're rendering
+
+var renderExpirationTime$1 = NoWork; // Whether to root completed, errored, suspended, etc.
+
+var workInProgressRootExitStatus = RootIncomplete; // A fatal error, if one is thrown
+
+var workInProgressRootFatalError = null; // Most recent event time among processed updates during this render.
+// This is conceptually a time stamp but expressed in terms of an ExpirationTime
+// because we deal mostly with expiration times in the hot path, so this avoids
+// the conversion happening in the hot path.
+
+var workInProgressRootLatestProcessedExpirationTime = Sync;
+var workInProgressRootLatestSuspenseTimeout = Sync;
+var workInProgressRootCanSuspendUsingConfig = null; // The work left over by components that were visited during this render. Only
+// includes unprocessed updates, not work in bailed out children.
+
+var workInProgressRootNextUnprocessedUpdateTime = NoWork; // If we're pinged while rendering we don't always restart immediately.
+// This flag determines if it might be worthwhile to restart if an opportunity
+// happens latere.
+
+var workInProgressRootHasPendingPing = false; // The most recent time we committed a fallback. This lets us ensure a train
+// model where we don't commit new loading states in too quick succession.
+
+var globalMostRecentFallbackTime = 0;
+var FALLBACK_THROTTLE_MS = 500;
+var nextEffect = null;
+var hasUncaughtError = false;
+var firstUncaughtError = null;
+var legacyErrorBoundariesThatAlreadyFailed = null;
+var rootDoesHavePassiveEffects = false;
+var rootWithPendingPassiveEffects = null;
+var pendingPassiveEffectsRenderPriority = NoPriority;
+var pendingPassiveEffectsExpirationTime = NoWork;
+var rootsWithPendingDiscreteUpdates = null; // Use these to prevent an infinite loop of nested updates
+
+var NESTED_UPDATE_LIMIT = 50;
+var nestedUpdateCount = 0;
+var rootWithNestedUpdates = null;
+var NESTED_PASSIVE_UPDATE_LIMIT = 50;
+var nestedPassiveUpdateCount = 0;
+var interruptedBy = null; // Marks the need to reschedule pending interactions at these expiration times
+// during the commit phase. This enables them to be traced across components
+// that spawn new work during render. E.g. hidden boundaries, suspended SSR
+// hydration or SuspenseList.
+
+var spawnedWorkDuringRender = null; // Expiration times are computed by adding to the current time (the start
+// time). However, if two updates are scheduled within the same event, we
+// should treat their start times as simultaneous, even if the actual clock
+// time has advanced between the first and second call.
+// In other words, because expiration times determine how updates are batched,
+// we want all updates of like priority that occur within the same event to
+// receive the same expiration time. Otherwise we get tearing.
+
+var currentEventTime = NoWork;
+function requestCurrentTimeForUpdate() {
+  if ((executionContext & (RenderContext | CommitContext)) !== NoContext) {
+    // We're inside React, so it's fine to read the actual time.
+    return msToExpirationTime(now());
+  } // We're not inside React, so we may be in the middle of a browser event.
+
+
+  if (currentEventTime !== NoWork) {
+    // Use the same start time for all updates until we enter React again.
+    return currentEventTime;
+  } // This is the first update since React yielded. Compute a new start time.
+
+
+  currentEventTime = msToExpirationTime(now());
+  return currentEventTime;
+}
+function getCurrentTime() {
+  return msToExpirationTime(now());
+}
+function computeExpirationForFiber(currentTime, fiber, suspenseConfig) {
+  var mode = fiber.mode;
+
+  if ((mode & BlockingMode) === NoMode) {
+    return Sync;
+  }
+
+  var priorityLevel = getCurrentPriorityLevel();
+
+  if ((mode & ConcurrentMode) === NoMode) {
+    return priorityLevel === ImmediatePriority ? Sync : Batched;
+  }
+
+  if ((executionContext & RenderContext) !== NoContext) {
+    // Use w
