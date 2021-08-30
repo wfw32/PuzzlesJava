@@ -67652,4 +67652,246 @@ function computeExpirationForFiber(currentTime, fiber, suspenseConfig) {
   }
 
   if ((executionContext & RenderContext) !== NoContext) {
-    // Use w
+    // Use whatever time we're already rendering
+    // TODO: Should there be a way to opt out, like with `runWithPriority`?
+    return renderExpirationTime$1;
+  }
+
+  var expirationTime;
+
+  if (suspenseConfig !== null) {
+    // Compute an expiration time based on the Suspense timeout.
+    expirationTime = computeSuspenseExpiration(currentTime, suspenseConfig.timeoutMs | 0 || LOW_PRIORITY_EXPIRATION);
+  } else {
+    // Compute an expiration time based on the Scheduler priority.
+    switch (priorityLevel) {
+      case ImmediatePriority:
+        expirationTime = Sync;
+        break;
+
+      case UserBlockingPriority$1:
+        // TODO: Rename this to computeUserBlockingExpiration
+        expirationTime = computeInteractiveExpiration(currentTime);
+        break;
+
+      case NormalPriority:
+      case LowPriority:
+        // TODO: Handle LowPriority
+        // TODO: Rename this to... something better.
+        expirationTime = computeAsyncExpiration(currentTime);
+        break;
+
+      case IdlePriority:
+        expirationTime = Idle;
+        break;
+
+      default:
+        {
+          {
+            throw Error( "Expected a valid priority level" );
+          }
+        }
+
+    }
+  } // If we're in the middle of rendering a tree, do not update at the same
+  // expiration time that is already rendering.
+  // TODO: We shouldn't have to do this if the update is on a different root.
+  // Refactor computeExpirationForFiber + scheduleUpdate so we have access to
+  // the root when we check for this condition.
+
+
+  if (workInProgressRoot !== null && expirationTime === renderExpirationTime$1) {
+    // This is a trick to move this update into a separate batch
+    expirationTime -= 1;
+  }
+
+  return expirationTime;
+}
+function scheduleUpdateOnFiber(fiber, expirationTime) {
+  checkForNestedUpdates();
+  warnAboutRenderPhaseUpdatesInDEV(fiber);
+  var root = markUpdateTimeFromFiberToRoot(fiber, expirationTime);
+
+  if (root === null) {
+    warnAboutUpdateOnUnmountedFiberInDEV(fiber);
+    return;
+  }
+
+  checkForInterruption(fiber, expirationTime);
+  recordScheduleUpdate(); // TODO: computeExpirationForFiber also reads the priority. Pass the
+  // priority as an argument to that function and this one.
+
+  var priorityLevel = getCurrentPriorityLevel();
+
+  if (expirationTime === Sync) {
+    if ( // Check if we're inside unbatchedUpdates
+    (executionContext & LegacyUnbatchedContext) !== NoContext && // Check if we're not already rendering
+    (executionContext & (RenderContext | CommitContext)) === NoContext) {
+      // Register pending interactions on the root to avoid losing traced interaction data.
+      schedulePendingInteractions(root, expirationTime); // This is a legacy edge case. The initial mount of a ReactDOM.render-ed
+      // root inside of batchedUpdates should be synchronous, but layout updates
+      // should be deferred until the end of the batch.
+
+      performSyncWorkOnRoot(root);
+    } else {
+      ensureRootIsScheduled(root);
+      schedulePendingInteractions(root, expirationTime);
+
+      if (executionContext === NoContext) {
+        // Flush the synchronous work now, unless we're already working or inside
+        // a batch. This is intentionally inside scheduleUpdateOnFiber instead of
+        // scheduleCallbackForFiber to preserve the ability to schedule a callback
+        // without immediately flushing it. We only do this for user-initiated
+        // updates, to preserve historical behavior of legacy mode.
+        flushSyncCallbackQueue();
+      }
+    }
+  } else {
+    ensureRootIsScheduled(root);
+    schedulePendingInteractions(root, expirationTime);
+  }
+
+  if ((executionContext & DiscreteEventContext) !== NoContext && ( // Only updates at user-blocking priority or greater are considered
+  // discrete, even inside a discrete event.
+  priorityLevel === UserBlockingPriority$1 || priorityLevel === ImmediatePriority)) {
+    // This is the result of a discrete event. Track the lowest priority
+    // discrete update per root so we can flush them early, if needed.
+    if (rootsWithPendingDiscreteUpdates === null) {
+      rootsWithPendingDiscreteUpdates = new Map([[root, expirationTime]]);
+    } else {
+      var lastDiscreteTime = rootsWithPendingDiscreteUpdates.get(root);
+
+      if (lastDiscreteTime === undefined || lastDiscreteTime > expirationTime) {
+        rootsWithPendingDiscreteUpdates.set(root, expirationTime);
+      }
+    }
+  }
+}
+var scheduleWork = scheduleUpdateOnFiber; // This is split into a separate function so we can mark a fiber with pending
+// work without treating it as a typical update that originates from an event;
+// e.g. retrying a Suspense boundary isn't an update, but it does schedule work
+// on a fiber.
+
+function markUpdateTimeFromFiberToRoot(fiber, expirationTime) {
+  // Update the source fiber's expiration time
+  if (fiber.expirationTime < expirationTime) {
+    fiber.expirationTime = expirationTime;
+  }
+
+  var alternate = fiber.alternate;
+
+  if (alternate !== null && alternate.expirationTime < expirationTime) {
+    alternate.expirationTime = expirationTime;
+  } // Walk the parent path to the root and update the child expiration time.
+
+
+  var node = fiber.return;
+  var root = null;
+
+  if (node === null && fiber.tag === HostRoot) {
+    root = fiber.stateNode;
+  } else {
+    while (node !== null) {
+      alternate = node.alternate;
+
+      if (node.childExpirationTime < expirationTime) {
+        node.childExpirationTime = expirationTime;
+
+        if (alternate !== null && alternate.childExpirationTime < expirationTime) {
+          alternate.childExpirationTime = expirationTime;
+        }
+      } else if (alternate !== null && alternate.childExpirationTime < expirationTime) {
+        alternate.childExpirationTime = expirationTime;
+      }
+
+      if (node.return === null && node.tag === HostRoot) {
+        root = node.stateNode;
+        break;
+      }
+
+      node = node.return;
+    }
+  }
+
+  if (root !== null) {
+    if (workInProgressRoot === root) {
+      // Received an update to a tree that's in the middle of rendering. Mark
+      // that's unprocessed work on this root.
+      markUnprocessedUpdateTime(expirationTime);
+
+      if (workInProgressRootExitStatus === RootSuspendedWithDelay) {
+        // The root already suspended with a delay, which means this render
+        // definitely won't finish. Since we have a new update, let's mark it as
+        // suspended now, right before marking the incoming update. This has the
+        // effect of interrupting the current render and switching to the update.
+        // TODO: This happens to work when receiving an update during the render
+        // phase, because of the trick inside computeExpirationForFiber to
+        // subtract 1 from `renderExpirationTime` to move it into a
+        // separate bucket. But we should probably model it with an exception,
+        // using the same mechanism we use to force hydration of a subtree.
+        // TODO: This does not account for low pri updates that were already
+        // scheduled before the root started rendering. Need to track the next
+        // pending expiration time (perhaps by backtracking the return path) and
+        // then trigger a restart in the `renderDidSuspendDelayIfPossible` path.
+        markRootSuspendedAtTime(root, renderExpirationTime$1);
+      }
+    } // Mark that the root has a pending update.
+
+
+    markRootUpdatedAtTime(root, expirationTime);
+  }
+
+  return root;
+}
+
+function getNextRootExpirationTimeToWorkOn(root) {
+  // Determines the next expiration time that the root should render, taking
+  // into account levels that may be suspended, or levels that may have
+  // received a ping.
+  var lastExpiredTime = root.lastExpiredTime;
+
+  if (lastExpiredTime !== NoWork) {
+    return lastExpiredTime;
+  } // "Pending" refers to any update that hasn't committed yet, including if it
+  // suspended. The "suspended" range is therefore a subset.
+
+
+  var firstPendingTime = root.firstPendingTime;
+
+  if (!isRootSuspendedAtTime(root, firstPendingTime)) {
+    // The highest priority pending time is not suspended. Let's work on that.
+    return firstPendingTime;
+  } // If the first pending time is suspended, check if there's a lower priority
+  // pending level that we know about. Or check if we received a ping. Work
+  // on whichever is higher priority.
+
+
+  var lastPingedTime = root.lastPingedTime;
+  var nextKnownPendingLevel = root.nextKnownPendingLevel;
+  var nextLevel = lastPingedTime > nextKnownPendingLevel ? lastPingedTime : nextKnownPendingLevel;
+
+  if ( nextLevel <= Idle && firstPendingTime !== nextLevel) {
+    // Don't work on Idle/Never priority unless everything else is committed.
+    return NoWork;
+  }
+
+  return nextLevel;
+} // Use this function to schedule a task for a root. There's only one task per
+// root; if a task was already scheduled, we'll check to make sure the
+// expiration time of the existing task is the same as the expiration time of
+// the next level that the root has work on. This function is called on every
+// update, and right before exiting a task.
+
+
+function ensureRootIsScheduled(root) {
+  var lastExpiredTime = root.lastExpiredTime;
+
+  if (lastExpiredTime !== NoWork) {
+    // Special case: Expired work should flush synchronously.
+    root.callbackExpirationTime = Sync;
+    root.callbackPriority = ImmediatePriority;
+    root.callbackNode = scheduleSyncCallback(performSyncWorkOnRoot.bind(null, root));
+    return;
+  }
+
+  var expirationTime = getNextRootExpirationTimeToWorkOn(root
