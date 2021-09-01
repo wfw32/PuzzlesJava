@@ -68692,4 +68692,272 @@ function performUnitOfWork(unitOfWork) {
   // nothing should rely on this, but relying on it here means that we don't
   // need an additional field on the work in progress.
   var current = unitOfWork.alternate;
-  startWorkTimer(u
+  startWorkTimer(unitOfWork);
+  setCurrentFiber(unitOfWork);
+  var next;
+
+  if ( (unitOfWork.mode & ProfileMode) !== NoMode) {
+    startProfilerTimer(unitOfWork);
+    next = beginWork$1(current, unitOfWork, renderExpirationTime$1);
+    stopProfilerTimerIfRunningAndRecordDelta(unitOfWork, true);
+  } else {
+    next = beginWork$1(current, unitOfWork, renderExpirationTime$1);
+  }
+
+  resetCurrentFiber();
+  unitOfWork.memoizedProps = unitOfWork.pendingProps;
+
+  if (next === null) {
+    // If this doesn't spawn new work, complete the current work.
+    next = completeUnitOfWork(unitOfWork);
+  }
+
+  ReactCurrentOwner$2.current = null;
+  return next;
+}
+
+function completeUnitOfWork(unitOfWork) {
+  // Attempt to complete the current unit of work, then move to the next
+  // sibling. If there are no more siblings, return to the parent fiber.
+  workInProgress = unitOfWork;
+
+  do {
+    // The current, flushed, state of this fiber is the alternate. Ideally
+    // nothing should rely on this, but relying on it here means that we don't
+    // need an additional field on the work in progress.
+    var current = workInProgress.alternate;
+    var returnFiber = workInProgress.return; // Check if the work completed or if something threw.
+
+    if ((workInProgress.effectTag & Incomplete) === NoEffect) {
+      setCurrentFiber(workInProgress);
+      var next = void 0;
+
+      if ( (workInProgress.mode & ProfileMode) === NoMode) {
+        next = completeWork(current, workInProgress, renderExpirationTime$1);
+      } else {
+        startProfilerTimer(workInProgress);
+        next = completeWork(current, workInProgress, renderExpirationTime$1); // Update render duration assuming we didn't error.
+
+        stopProfilerTimerIfRunningAndRecordDelta(workInProgress, false);
+      }
+
+      stopWorkTimer(workInProgress);
+      resetCurrentFiber();
+      resetChildExpirationTime(workInProgress);
+
+      if (next !== null) {
+        // Completing this fiber spawned new work. Work on that next.
+        return next;
+      }
+
+      if (returnFiber !== null && // Do not append effects to parents if a sibling failed to complete
+      (returnFiber.effectTag & Incomplete) === NoEffect) {
+        // Append all the effects of the subtree and this fiber onto the effect
+        // list of the parent. The completion order of the children affects the
+        // side-effect order.
+        if (returnFiber.firstEffect === null) {
+          returnFiber.firstEffect = workInProgress.firstEffect;
+        }
+
+        if (workInProgress.lastEffect !== null) {
+          if (returnFiber.lastEffect !== null) {
+            returnFiber.lastEffect.nextEffect = workInProgress.firstEffect;
+          }
+
+          returnFiber.lastEffect = workInProgress.lastEffect;
+        } // If this fiber had side-effects, we append it AFTER the children's
+        // side-effects. We can perform certain side-effects earlier if needed,
+        // by doing multiple passes over the effect list. We don't want to
+        // schedule our own side-effect on our own list because if end up
+        // reusing children we'll schedule this effect onto itself since we're
+        // at the end.
+
+
+        var effectTag = workInProgress.effectTag; // Skip both NoWork and PerformedWork tags when creating the effect
+        // list. PerformedWork effect is read by React DevTools but shouldn't be
+        // committed.
+
+        if (effectTag > PerformedWork) {
+          if (returnFiber.lastEffect !== null) {
+            returnFiber.lastEffect.nextEffect = workInProgress;
+          } else {
+            returnFiber.firstEffect = workInProgress;
+          }
+
+          returnFiber.lastEffect = workInProgress;
+        }
+      }
+    } else {
+      // This fiber did not complete because something threw. Pop values off
+      // the stack without entering the complete phase. If this is a boundary,
+      // capture values if possible.
+      var _next = unwindWork(workInProgress); // Because this fiber did not complete, don't reset its expiration time.
+
+
+      if ( (workInProgress.mode & ProfileMode) !== NoMode) {
+        // Record the render duration for the fiber that errored.
+        stopProfilerTimerIfRunningAndRecordDelta(workInProgress, false); // Include the time spent working on failed children before continuing.
+
+        var actualDuration = workInProgress.actualDuration;
+        var child = workInProgress.child;
+
+        while (child !== null) {
+          actualDuration += child.actualDuration;
+          child = child.sibling;
+        }
+
+        workInProgress.actualDuration = actualDuration;
+      }
+
+      if (_next !== null) {
+        // If completing this work spawned new work, do that next. We'll come
+        // back here again.
+        // Since we're restarting, remove anything that is not a host effect
+        // from the effect tag.
+        // TODO: The name stopFailedWorkTimer is misleading because Suspense
+        // also captures and restarts.
+        stopFailedWorkTimer(workInProgress);
+        _next.effectTag &= HostEffectMask;
+        return _next;
+      }
+
+      stopWorkTimer(workInProgress);
+
+      if (returnFiber !== null) {
+        // Mark the parent fiber as incomplete and clear its effect list.
+        returnFiber.firstEffect = returnFiber.lastEffect = null;
+        returnFiber.effectTag |= Incomplete;
+      }
+    }
+
+    var siblingFiber = workInProgress.sibling;
+
+    if (siblingFiber !== null) {
+      // If there is more work to do in this returnFiber, do that next.
+      return siblingFiber;
+    } // Otherwise, return to the parent
+
+
+    workInProgress = returnFiber;
+  } while (workInProgress !== null); // We've reached the root.
+
+
+  if (workInProgressRootExitStatus === RootIncomplete) {
+    workInProgressRootExitStatus = RootCompleted;
+  }
+
+  return null;
+}
+
+function getRemainingExpirationTime(fiber) {
+  var updateExpirationTime = fiber.expirationTime;
+  var childExpirationTime = fiber.childExpirationTime;
+  return updateExpirationTime > childExpirationTime ? updateExpirationTime : childExpirationTime;
+}
+
+function resetChildExpirationTime(completedWork) {
+  if (renderExpirationTime$1 !== Never && completedWork.childExpirationTime === Never) {
+    // The children of this component are hidden. Don't bubble their
+    // expiration times.
+    return;
+  }
+
+  var newChildExpirationTime = NoWork; // Bubble up the earliest expiration time.
+
+  if ( (completedWork.mode & ProfileMode) !== NoMode) {
+    // In profiling mode, resetChildExpirationTime is also used to reset
+    // profiler durations.
+    var actualDuration = completedWork.actualDuration;
+    var treeBaseDuration = completedWork.selfBaseDuration; // When a fiber is cloned, its actualDuration is reset to 0. This value will
+    // only be updated if work is done on the fiber (i.e. it doesn't bailout).
+    // When work is done, it should bubble to the parent's actualDuration. If
+    // the fiber has not been cloned though, (meaning no work was done), then
+    // this value will reflect the amount of time spent working on a previous
+    // render. In that case it should not bubble. We determine whether it was
+    // cloned by comparing the child pointer.
+
+    var shouldBubbleActualDurations = completedWork.alternate === null || completedWork.child !== completedWork.alternate.child;
+    var child = completedWork.child;
+
+    while (child !== null) {
+      var childUpdateExpirationTime = child.expirationTime;
+      var childChildExpirationTime = child.childExpirationTime;
+
+      if (childUpdateExpirationTime > newChildExpirationTime) {
+        newChildExpirationTime = childUpdateExpirationTime;
+      }
+
+      if (childChildExpirationTime > newChildExpirationTime) {
+        newChildExpirationTime = childChildExpirationTime;
+      }
+
+      if (shouldBubbleActualDurations) {
+        actualDuration += child.actualDuration;
+      }
+
+      treeBaseDuration += child.treeBaseDuration;
+      child = child.sibling;
+    }
+
+    completedWork.actualDuration = actualDuration;
+    completedWork.treeBaseDuration = treeBaseDuration;
+  } else {
+    var _child = completedWork.child;
+
+    while (_child !== null) {
+      var _childUpdateExpirationTime = _child.expirationTime;
+      var _childChildExpirationTime = _child.childExpirationTime;
+
+      if (_childUpdateExpirationTime > newChildExpirationTime) {
+        newChildExpirationTime = _childUpdateExpirationTime;
+      }
+
+      if (_childChildExpirationTime > newChildExpirationTime) {
+        newChildExpirationTime = _childChildExpirationTime;
+      }
+
+      _child = _child.sibling;
+    }
+  }
+
+  completedWork.childExpirationTime = newChildExpirationTime;
+}
+
+function commitRoot(root) {
+  var renderPriorityLevel = getCurrentPriorityLevel();
+  runWithPriority$1(ImmediatePriority, commitRootImpl.bind(null, root, renderPriorityLevel));
+  return null;
+}
+
+function commitRootImpl(root, renderPriorityLevel) {
+  do {
+    // `flushPassiveEffects` will call `flushSyncUpdateQueue` at the end, which
+    // means `flushPassiveEffects` will sometimes result in additional
+    // passive effects. So we need to keep flushing in a loop until there are
+    // no more pending effects.
+    // TODO: Might be better if `flushPassiveEffects` did not automatically
+    // flush synchronous work at the end, to avoid factoring hazards like this.
+    flushPassiveEffects();
+  } while (rootWithPendingPassiveEffects !== null);
+
+  flushRenderPhaseStrictModeWarningsInDEV();
+
+  if (!((executionContext & (RenderContext | CommitContext)) === NoContext)) {
+    {
+      throw Error( "Should not already be working." );
+    }
+  }
+
+  var finishedWork = root.finishedWork;
+  var expirationTime = root.finishedExpirationTime;
+
+  if (finishedWork === null) {
+    return null;
+  }
+
+  root.finishedWork = null;
+  root.finishedExpirationTime = NoWork;
+
+  if (!(finishedWork !== root.current)) {
+    {
+      throw Error( "Cannot commit the same tree as before
