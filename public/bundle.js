@@ -68419,4 +68419,277 @@ function batchedEventUpdates$1(fn, a) {
   } finally {
     executionContext = prevExecutionContext;
 
-    if (e
+    if (executionContext === NoContext) {
+      // Flush the immediate callbacks that were scheduled during this batch
+      flushSyncCallbackQueue();
+    }
+  }
+}
+function discreteUpdates$1(fn, a, b, c, d) {
+  var prevExecutionContext = executionContext;
+  executionContext |= DiscreteEventContext;
+
+  try {
+    // Should this
+    return runWithPriority$1(UserBlockingPriority$1, fn.bind(null, a, b, c, d));
+  } finally {
+    executionContext = prevExecutionContext;
+
+    if (executionContext === NoContext) {
+      // Flush the immediate callbacks that were scheduled during this batch
+      flushSyncCallbackQueue();
+    }
+  }
+}
+function unbatchedUpdates(fn, a) {
+  var prevExecutionContext = executionContext;
+  executionContext &= ~BatchedContext;
+  executionContext |= LegacyUnbatchedContext;
+
+  try {
+    return fn(a);
+  } finally {
+    executionContext = prevExecutionContext;
+
+    if (executionContext === NoContext) {
+      // Flush the immediate callbacks that were scheduled during this batch
+      flushSyncCallbackQueue();
+    }
+  }
+}
+function flushSync(fn, a) {
+  if ((executionContext & (RenderContext | CommitContext)) !== NoContext) {
+    {
+      {
+        throw Error( "flushSync was called from inside a lifecycle method. It cannot be called when React is already rendering." );
+      }
+    }
+  }
+
+  var prevExecutionContext = executionContext;
+  executionContext |= BatchedContext;
+
+  try {
+    return runWithPriority$1(ImmediatePriority, fn.bind(null, a));
+  } finally {
+    executionContext = prevExecutionContext; // Flush the immediate callbacks that were scheduled during this batch.
+    // Note that this will happen even if batchedUpdates is higher up
+    // the stack.
+
+    flushSyncCallbackQueue();
+  }
+}
+
+function prepareFreshStack(root, expirationTime) {
+  root.finishedWork = null;
+  root.finishedExpirationTime = NoWork;
+  var timeoutHandle = root.timeoutHandle;
+
+  if (timeoutHandle !== noTimeout) {
+    // The root previous suspended and scheduled a timeout to commit a fallback
+    // state. Now that we have additional work, cancel the timeout.
+    root.timeoutHandle = noTimeout; // $FlowFixMe Complains noTimeout is not a TimeoutID, despite the check above
+
+    cancelTimeout(timeoutHandle);
+  }
+
+  if (workInProgress !== null) {
+    var interruptedWork = workInProgress.return;
+
+    while (interruptedWork !== null) {
+      unwindInterruptedWork(interruptedWork);
+      interruptedWork = interruptedWork.return;
+    }
+  }
+
+  workInProgressRoot = root;
+  workInProgress = createWorkInProgress(root.current, null);
+  renderExpirationTime$1 = expirationTime;
+  workInProgressRootExitStatus = RootIncomplete;
+  workInProgressRootFatalError = null;
+  workInProgressRootLatestProcessedExpirationTime = Sync;
+  workInProgressRootLatestSuspenseTimeout = Sync;
+  workInProgressRootCanSuspendUsingConfig = null;
+  workInProgressRootNextUnprocessedUpdateTime = NoWork;
+  workInProgressRootHasPendingPing = false;
+
+  {
+    spawnedWorkDuringRender = null;
+  }
+
+  {
+    ReactStrictModeWarnings.discardPendingWarnings();
+  }
+}
+
+function handleError(root, thrownValue) {
+  do {
+    try {
+      // Reset module-level state that was set during the render phase.
+      resetContextDependencies();
+      resetHooksAfterThrow();
+      resetCurrentFiber();
+
+      if (workInProgress === null || workInProgress.return === null) {
+        // Expected to be working on a non-root fiber. This is a fatal error
+        // because there's no ancestor that can handle it; the root is
+        // supposed to capture all errors that weren't caught by an error
+        // boundary.
+        workInProgressRootExitStatus = RootFatalErrored;
+        workInProgressRootFatalError = thrownValue; // Set `workInProgress` to null. This represents advancing to the next
+        // sibling, or the parent if there are no siblings. But since the root
+        // has no siblings nor a parent, we set it to null. Usually this is
+        // handled by `completeUnitOfWork` or `unwindWork`, but since we're
+        // interntionally not calling those, we need set it here.
+        // TODO: Consider calling `unwindWork` to pop the contexts.
+
+        workInProgress = null;
+        return null;
+      }
+
+      if (enableProfilerTimer && workInProgress.mode & ProfileMode) {
+        // Record the time spent rendering before an error was thrown. This
+        // avoids inaccurate Profiler durations in the case of a
+        // suspended render.
+        stopProfilerTimerIfRunningAndRecordDelta(workInProgress, true);
+      }
+
+      throwException(root, workInProgress.return, workInProgress, thrownValue, renderExpirationTime$1);
+      workInProgress = completeUnitOfWork(workInProgress);
+    } catch (yetAnotherThrownValue) {
+      // Something in the return path also threw.
+      thrownValue = yetAnotherThrownValue;
+      continue;
+    } // Return to the normal work loop.
+
+
+    return;
+  } while (true);
+}
+
+function pushDispatcher(root) {
+  var prevDispatcher = ReactCurrentDispatcher$1.current;
+  ReactCurrentDispatcher$1.current = ContextOnlyDispatcher;
+
+  if (prevDispatcher === null) {
+    // The React isomorphic package does not include a default dispatcher.
+    // Instead the first renderer will lazily attach one, in order to give
+    // nicer error messages.
+    return ContextOnlyDispatcher;
+  } else {
+    return prevDispatcher;
+  }
+}
+
+function popDispatcher(prevDispatcher) {
+  ReactCurrentDispatcher$1.current = prevDispatcher;
+}
+
+function pushInteractions(root) {
+  {
+    var prevInteractions = tracing.__interactionsRef.current;
+    tracing.__interactionsRef.current = root.memoizedInteractions;
+    return prevInteractions;
+  }
+}
+
+function popInteractions(prevInteractions) {
+  {
+    tracing.__interactionsRef.current = prevInteractions;
+  }
+}
+
+function markCommitTimeOfFallback() {
+  globalMostRecentFallbackTime = now();
+}
+function markRenderEventTimeAndConfig(expirationTime, suspenseConfig) {
+  if (expirationTime < workInProgressRootLatestProcessedExpirationTime && expirationTime > Idle) {
+    workInProgressRootLatestProcessedExpirationTime = expirationTime;
+  }
+
+  if (suspenseConfig !== null) {
+    if (expirationTime < workInProgressRootLatestSuspenseTimeout && expirationTime > Idle) {
+      workInProgressRootLatestSuspenseTimeout = expirationTime; // Most of the time we only have one config and getting wrong is not bad.
+
+      workInProgressRootCanSuspendUsingConfig = suspenseConfig;
+    }
+  }
+}
+function markUnprocessedUpdateTime(expirationTime) {
+  if (expirationTime > workInProgressRootNextUnprocessedUpdateTime) {
+    workInProgressRootNextUnprocessedUpdateTime = expirationTime;
+  }
+}
+function renderDidSuspend() {
+  if (workInProgressRootExitStatus === RootIncomplete) {
+    workInProgressRootExitStatus = RootSuspended;
+  }
+}
+function renderDidSuspendDelayIfPossible() {
+  if (workInProgressRootExitStatus === RootIncomplete || workInProgressRootExitStatus === RootSuspended) {
+    workInProgressRootExitStatus = RootSuspendedWithDelay;
+  } // Check if there's a lower priority update somewhere else in the tree.
+
+
+  if (workInProgressRootNextUnprocessedUpdateTime !== NoWork && workInProgressRoot !== null) {
+    // Mark the current render as suspended, and then mark that there's a
+    // pending update.
+    // TODO: This should immediately interrupt the current render, instead
+    // of waiting until the next time we yield.
+    markRootSuspendedAtTime(workInProgressRoot, renderExpirationTime$1);
+    markRootUpdatedAtTime(workInProgressRoot, workInProgressRootNextUnprocessedUpdateTime);
+  }
+}
+function renderDidError() {
+  if (workInProgressRootExitStatus !== RootCompleted) {
+    workInProgressRootExitStatus = RootErrored;
+  }
+} // Called during render to determine if anything has suspended.
+// Returns false if we're not sure.
+
+function renderHasNotSuspendedYet() {
+  // If something errored or completed, we can't really be sure,
+  // so those are false.
+  return workInProgressRootExitStatus === RootIncomplete;
+}
+
+function inferTimeFromExpirationTime(expirationTime) {
+  // We don't know exactly when the update was scheduled, but we can infer an
+  // approximate start time from the expiration time.
+  var earliestExpirationTimeMs = expirationTimeToMs(expirationTime);
+  return earliestExpirationTimeMs - LOW_PRIORITY_EXPIRATION;
+}
+
+function inferTimeFromExpirationTimeWithSuspenseConfig(expirationTime, suspenseConfig) {
+  // We don't know exactly when the update was scheduled, but we can infer an
+  // approximate start time from the expiration time by subtracting the timeout
+  // that was added to the event time.
+  var earliestExpirationTimeMs = expirationTimeToMs(expirationTime);
+  return earliestExpirationTimeMs - (suspenseConfig.timeoutMs | 0 || LOW_PRIORITY_EXPIRATION);
+} // The work loop is an extremely hot path. Tell Closure not to inline it.
+
+/** @noinline */
+
+
+function workLoopSync() {
+  // Already timed out, so perform work without checking if we need to yield.
+  while (workInProgress !== null) {
+    workInProgress = performUnitOfWork(workInProgress);
+  }
+}
+/** @noinline */
+
+
+function workLoopConcurrent() {
+  // Perform work until Scheduler asks us to yield
+  while (workInProgress !== null && !shouldYield()) {
+    workInProgress = performUnitOfWork(workInProgress);
+  }
+}
+
+function performUnitOfWork(unitOfWork) {
+  // The current, flushed, state of this fiber is the alternate. Ideally
+  // nothing should rely on this, but relying on it here means that we don't
+  // need an additional field on the work in progress.
+  var current = unitOfWork.alternate;
+  startWorkTimer(u
