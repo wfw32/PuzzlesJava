@@ -68147,4 +68147,276 @@ function finishConcurrentRender(root, finishedWork, exitStatus, expirationTime) 
         break;
       }
 
-    case RootSuspendedW
+    case RootSuspendedWithDelay:
+      {
+        markRootSuspendedAtTime(root, expirationTime);
+        var _lastSuspendedTime = root.lastSuspendedTime;
+
+        if (expirationTime === _lastSuspendedTime) {
+          root.nextKnownPendingLevel = getRemainingExpirationTime(finishedWork);
+        }
+
+        if ( // do not delay if we're inside an act() scope
+        !( IsThisRendererActing.current)) {
+          // We're suspended in a state that should be avoided. We'll try to
+          // avoid committing it for as long as the timeouts let us.
+          if (workInProgressRootHasPendingPing) {
+            var _lastPingedTime = root.lastPingedTime;
+
+            if (_lastPingedTime === NoWork || _lastPingedTime >= expirationTime) {
+              // This render was pinged but we didn't get to restart earlier
+              // so try restarting now instead.
+              root.lastPingedTime = expirationTime;
+              prepareFreshStack(root, expirationTime);
+              break;
+            }
+          }
+
+          var _nextTime = getNextRootExpirationTimeToWorkOn(root);
+
+          if (_nextTime !== NoWork && _nextTime !== expirationTime) {
+            // There's additional work on this root.
+            break;
+          }
+
+          if (_lastSuspendedTime !== NoWork && _lastSuspendedTime !== expirationTime) {
+            // We should prefer to render the fallback of at the last
+            // suspended level. Ping the last suspended level to try
+            // rendering it again.
+            root.lastPingedTime = _lastSuspendedTime;
+            break;
+          }
+
+          var _msUntilTimeout;
+
+          if (workInProgressRootLatestSuspenseTimeout !== Sync) {
+            // We have processed a suspense config whose expiration time we
+            // can use as the timeout.
+            _msUntilTimeout = expirationTimeToMs(workInProgressRootLatestSuspenseTimeout) - now();
+          } else if (workInProgressRootLatestProcessedExpirationTime === Sync) {
+            // This should never normally happen because only new updates
+            // cause delayed states, so we should have processed something.
+            // However, this could also happen in an offscreen tree.
+            _msUntilTimeout = 0;
+          } else {
+            // If we don't have a suspense config, we're going to use a
+            // heuristic to determine how long we can suspend.
+            var eventTimeMs = inferTimeFromExpirationTime(workInProgressRootLatestProcessedExpirationTime);
+            var currentTimeMs = now();
+            var timeUntilExpirationMs = expirationTimeToMs(expirationTime) - currentTimeMs;
+            var timeElapsed = currentTimeMs - eventTimeMs;
+
+            if (timeElapsed < 0) {
+              // We get this wrong some time since we estimate the time.
+              timeElapsed = 0;
+            }
+
+            _msUntilTimeout = jnd(timeElapsed) - timeElapsed; // Clamp the timeout to the expiration time. TODO: Once the
+            // event time is exact instead of inferred from expiration time
+            // we don't need this.
+
+            if (timeUntilExpirationMs < _msUntilTimeout) {
+              _msUntilTimeout = timeUntilExpirationMs;
+            }
+          } // Don't bother with a very short suspense time.
+
+
+          if (_msUntilTimeout > 10) {
+            // The render is suspended, it hasn't timed out, and there's no
+            // lower priority work to do. Instead of committing the fallback
+            // immediately, wait for more data to arrive.
+            root.timeoutHandle = scheduleTimeout(commitRoot.bind(null, root), _msUntilTimeout);
+            break;
+          }
+        } // The work expired. Commit immediately.
+
+
+        commitRoot(root);
+        break;
+      }
+
+    case RootCompleted:
+      {
+        // The work completed. Ready to commit.
+        if ( // do not delay if we're inside an act() scope
+        !( IsThisRendererActing.current) && workInProgressRootLatestProcessedExpirationTime !== Sync && workInProgressRootCanSuspendUsingConfig !== null) {
+          // If we have exceeded the minimum loading delay, which probably
+          // means we have shown a spinner already, we might have to suspend
+          // a bit longer to ensure that the spinner is shown for
+          // enough time.
+          var _msUntilTimeout2 = computeMsUntilSuspenseLoadingDelay(workInProgressRootLatestProcessedExpirationTime, expirationTime, workInProgressRootCanSuspendUsingConfig);
+
+          if (_msUntilTimeout2 > 10) {
+            markRootSuspendedAtTime(root, expirationTime);
+            root.timeoutHandle = scheduleTimeout(commitRoot.bind(null, root), _msUntilTimeout2);
+            break;
+          }
+        }
+
+        commitRoot(root);
+        break;
+      }
+
+    default:
+      {
+        {
+          {
+            throw Error( "Unknown root exit status." );
+          }
+        }
+      }
+  }
+} // This is the entry point for synchronous tasks that don't go
+// through Scheduler
+
+
+function performSyncWorkOnRoot(root) {
+  // Check if there's expired work on this root. Otherwise, render at Sync.
+  var lastExpiredTime = root.lastExpiredTime;
+  var expirationTime = lastExpiredTime !== NoWork ? lastExpiredTime : Sync;
+
+  if (!((executionContext & (RenderContext | CommitContext)) === NoContext)) {
+    {
+      throw Error( "Should not already be working." );
+    }
+  }
+
+  flushPassiveEffects(); // If the root or expiration time have changed, throw out the existing stack
+  // and prepare a fresh one. Otherwise we'll continue where we left off.
+
+  if (root !== workInProgressRoot || expirationTime !== renderExpirationTime$1) {
+    prepareFreshStack(root, expirationTime);
+    startWorkOnPendingInteractions(root, expirationTime);
+  } // If we have a work-in-progress fiber, it means there's still work to do
+  // in this root.
+
+
+  if (workInProgress !== null) {
+    var prevExecutionContext = executionContext;
+    executionContext |= RenderContext;
+    var prevDispatcher = pushDispatcher();
+    var prevInteractions = pushInteractions(root);
+    startWorkLoopTimer(workInProgress);
+
+    do {
+      try {
+        workLoopSync();
+        break;
+      } catch (thrownValue) {
+        handleError(root, thrownValue);
+      }
+    } while (true);
+
+    resetContextDependencies();
+    executionContext = prevExecutionContext;
+    popDispatcher(prevDispatcher);
+
+    {
+      popInteractions(prevInteractions);
+    }
+
+    if (workInProgressRootExitStatus === RootFatalErrored) {
+      var fatalError = workInProgressRootFatalError;
+      stopInterruptedWorkLoopTimer();
+      prepareFreshStack(root, expirationTime);
+      markRootSuspendedAtTime(root, expirationTime);
+      ensureRootIsScheduled(root);
+      throw fatalError;
+    }
+
+    if (workInProgress !== null) {
+      // This is a sync render, so we should have finished the whole tree.
+      {
+        {
+          throw Error( "Cannot commit an incomplete root. This error is likely caused by a bug in React. Please file an issue." );
+        }
+      }
+    } else {
+      // We now have a consistent tree. Because this is a sync render, we
+      // will commit it even if something suspended.
+      stopFinishedWorkLoopTimer();
+      root.finishedWork = root.current.alternate;
+      root.finishedExpirationTime = expirationTime;
+      finishSyncRender(root);
+    } // Before exiting, make sure there's a callback scheduled for the next
+    // pending level.
+
+
+    ensureRootIsScheduled(root);
+  }
+
+  return null;
+}
+
+function finishSyncRender(root) {
+  // Set this to null to indicate there's no in-progress render.
+  workInProgressRoot = null;
+  commitRoot(root);
+}
+function flushDiscreteUpdates() {
+  // TODO: Should be able to flush inside batchedUpdates, but not inside `act`.
+  // However, `act` uses `batchedUpdates`, so there's no way to distinguish
+  // those two cases. Need to fix this before exposing flushDiscreteUpdates
+  // as a public API.
+  if ((executionContext & (BatchedContext | RenderContext | CommitContext)) !== NoContext) {
+    {
+      if ((executionContext & RenderContext) !== NoContext) {
+        error('unstable_flushDiscreteUpdates: Cannot flush updates when React is ' + 'already rendering.');
+      }
+    } // We're already rendering, so we can't synchronously flush pending work.
+    // This is probably a nested event dispatch triggered by a lifecycle/effect,
+    // like `el.focus()`. Exit.
+
+
+    return;
+  }
+
+  flushPendingDiscreteUpdates(); // If the discrete updates scheduled passive effects, flush them now so that
+  // they fire before the next serial event.
+
+  flushPassiveEffects();
+}
+function syncUpdates(fn, a, b, c) {
+  return runWithPriority$1(ImmediatePriority, fn.bind(null, a, b, c));
+}
+
+function flushPendingDiscreteUpdates() {
+  if (rootsWithPendingDiscreteUpdates !== null) {
+    // For each root with pending discrete updates, schedule a callback to
+    // immediately flush them.
+    var roots = rootsWithPendingDiscreteUpdates;
+    rootsWithPendingDiscreteUpdates = null;
+    roots.forEach(function (expirationTime, root) {
+      markRootExpiredAtTime(root, expirationTime);
+      ensureRootIsScheduled(root);
+    }); // Now flush the immediate queue.
+
+    flushSyncCallbackQueue();
+  }
+}
+
+function batchedUpdates$1(fn, a) {
+  var prevExecutionContext = executionContext;
+  executionContext |= BatchedContext;
+
+  try {
+    return fn(a);
+  } finally {
+    executionContext = prevExecutionContext;
+
+    if (executionContext === NoContext) {
+      // Flush the immediate callbacks that were scheduled during this batch
+      flushSyncCallbackQueue();
+    }
+  }
+}
+function batchedEventUpdates$1(fn, a) {
+  var prevExecutionContext = executionContext;
+  executionContext |= EventContext;
+
+  try {
+    return fn(a);
+  } finally {
+    executionContext = prevExecutionContext;
+
+    if (e
