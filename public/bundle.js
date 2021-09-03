@@ -69545,4 +69545,255 @@ function pingSuspendedRoot(root, thenable, suspendedTime) {
   var lastPingedTime = root.lastPingedTime;
 
   if (lastPingedTime !== NoWork && lastPingedTime < suspendedTime) {
-    // The
+    // There's already a lower priority ping scheduled.
+    return;
+  } // Mark the time at which this ping was scheduled.
+
+
+  root.lastPingedTime = suspendedTime;
+
+  ensureRootIsScheduled(root);
+  schedulePendingInteractions(root, suspendedTime);
+}
+
+function retryTimedOutBoundary(boundaryFiber, retryTime) {
+  // The boundary fiber (a Suspense component or SuspenseList component)
+  // previously was rendered in its fallback state. One of the promises that
+  // suspended it has resolved, which means at least part of the tree was
+  // likely unblocked. Try rendering again, at a new expiration time.
+  if (retryTime === NoWork) {
+    var suspenseConfig = null; // Retries don't carry over the already committed update.
+
+    var currentTime = requestCurrentTimeForUpdate();
+    retryTime = computeExpirationForFiber(currentTime, boundaryFiber, suspenseConfig);
+  } // TODO: Special case idle priority?
+
+
+  var root = markUpdateTimeFromFiberToRoot(boundaryFiber, retryTime);
+
+  if (root !== null) {
+    ensureRootIsScheduled(root);
+    schedulePendingInteractions(root, retryTime);
+  }
+}
+function resolveRetryThenable(boundaryFiber, thenable) {
+  var retryTime = NoWork; // Default
+
+  var retryCache;
+
+  {
+    retryCache = boundaryFiber.stateNode;
+  }
+
+  if (retryCache !== null) {
+    // The thenable resolved, so we no longer need to memoize, because it will
+    // never be thrown again.
+    retryCache.delete(thenable);
+  }
+
+  retryTimedOutBoundary(boundaryFiber, retryTime);
+} // Computes the next Just Noticeable Difference (JND) boundary.
+// The theory is that a person can't tell the difference between small differences in time.
+// Therefore, if we wait a bit longer than necessary that won't translate to a noticeable
+// difference in the experience. However, waiting for longer might mean that we can avoid
+// showing an intermediate loading state. The longer we have already waited, the harder it
+// is to tell small differences in time. Therefore, the longer we've already waited,
+// the longer we can wait additionally. At some point we have to give up though.
+// We pick a train model where the next boundary commits at a consistent schedule.
+// These particular numbers are vague estimates. We expect to adjust them based on research.
+
+function jnd(timeElapsed) {
+  return timeElapsed < 120 ? 120 : timeElapsed < 480 ? 480 : timeElapsed < 1080 ? 1080 : timeElapsed < 1920 ? 1920 : timeElapsed < 3000 ? 3000 : timeElapsed < 4320 ? 4320 : ceil(timeElapsed / 1960) * 1960;
+}
+
+function computeMsUntilSuspenseLoadingDelay(mostRecentEventTime, committedExpirationTime, suspenseConfig) {
+  var busyMinDurationMs = suspenseConfig.busyMinDurationMs | 0;
+
+  if (busyMinDurationMs <= 0) {
+    return 0;
+  }
+
+  var busyDelayMs = suspenseConfig.busyDelayMs | 0; // Compute the time until this render pass would expire.
+
+  var currentTimeMs = now();
+  var eventTimeMs = inferTimeFromExpirationTimeWithSuspenseConfig(mostRecentEventTime, suspenseConfig);
+  var timeElapsed = currentTimeMs - eventTimeMs;
+
+  if (timeElapsed <= busyDelayMs) {
+    // If we haven't yet waited longer than the initial delay, we don't
+    // have to wait any additional time.
+    return 0;
+  }
+
+  var msUntilTimeout = busyDelayMs + busyMinDurationMs - timeElapsed; // This is the value that is passed to `setTimeout`.
+
+  return msUntilTimeout;
+}
+
+function checkForNestedUpdates() {
+  if (nestedUpdateCount > NESTED_UPDATE_LIMIT) {
+    nestedUpdateCount = 0;
+    rootWithNestedUpdates = null;
+
+    {
+      {
+        throw Error( "Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops." );
+      }
+    }
+  }
+
+  {
+    if (nestedPassiveUpdateCount > NESTED_PASSIVE_UPDATE_LIMIT) {
+      nestedPassiveUpdateCount = 0;
+
+      error('Maximum update depth exceeded. This can happen when a component ' + "calls setState inside useEffect, but useEffect either doesn't " + 'have a dependency array, or one of the dependencies changes on ' + 'every render.');
+    }
+  }
+}
+
+function flushRenderPhaseStrictModeWarningsInDEV() {
+  {
+    ReactStrictModeWarnings.flushLegacyContextWarning();
+
+    {
+      ReactStrictModeWarnings.flushPendingUnsafeLifecycleWarnings();
+    }
+  }
+}
+
+function stopFinishedWorkLoopTimer() {
+  var didCompleteRoot = true;
+  stopWorkLoopTimer(interruptedBy, didCompleteRoot);
+  interruptedBy = null;
+}
+
+function stopInterruptedWorkLoopTimer() {
+  // TODO: Track which fiber caused the interruption.
+  var didCompleteRoot = false;
+  stopWorkLoopTimer(interruptedBy, didCompleteRoot);
+  interruptedBy = null;
+}
+
+function checkForInterruption(fiberThatReceivedUpdate, updateExpirationTime) {
+  if ( workInProgressRoot !== null && updateExpirationTime > renderExpirationTime$1) {
+    interruptedBy = fiberThatReceivedUpdate;
+  }
+}
+
+var didWarnStateUpdateForUnmountedComponent = null;
+
+function warnAboutUpdateOnUnmountedFiberInDEV(fiber) {
+  {
+    var tag = fiber.tag;
+
+    if (tag !== HostRoot && tag !== ClassComponent && tag !== FunctionComponent && tag !== ForwardRef && tag !== MemoComponent && tag !== SimpleMemoComponent && tag !== Block) {
+      // Only warn for user-defined components, not internal ones like Suspense.
+      return;
+    }
+    // the problematic code almost always lies inside that component.
+
+
+    var componentName = getComponentName(fiber.type) || 'ReactComponent';
+
+    if (didWarnStateUpdateForUnmountedComponent !== null) {
+      if (didWarnStateUpdateForUnmountedComponent.has(componentName)) {
+        return;
+      }
+
+      didWarnStateUpdateForUnmountedComponent.add(componentName);
+    } else {
+      didWarnStateUpdateForUnmountedComponent = new Set([componentName]);
+    }
+
+    error("Can't perform a React state update on an unmounted component. This " + 'is a no-op, but it indicates a memory leak in your application. To ' + 'fix, cancel all subscriptions and asynchronous tasks in %s.%s', tag === ClassComponent ? 'the componentWillUnmount method' : 'a useEffect cleanup function', getStackByFiberInDevAndProd(fiber));
+  }
+}
+
+var beginWork$1;
+
+{
+  var dummyFiber = null;
+
+  beginWork$1 = function (current, unitOfWork, expirationTime) {
+    // If a component throws an error, we replay it again in a synchronously
+    // dispatched event, so that the debugger will treat it as an uncaught
+    // error See ReactErrorUtils for more information.
+    // Before entering the begin phase, copy the work-in-progress onto a dummy
+    // fiber. If beginWork throws, we'll use this to reset the state.
+    var originalWorkInProgressCopy = assignFiberPropertiesInDEV(dummyFiber, unitOfWork);
+
+    try {
+      return beginWork(current, unitOfWork, expirationTime);
+    } catch (originalError) {
+      if (originalError !== null && typeof originalError === 'object' && typeof originalError.then === 'function') {
+        // Don't replay promises. Treat everything else like an error.
+        throw originalError;
+      } // Keep this code in sync with handleError; any changes here must have
+      // corresponding changes there.
+
+
+      resetContextDependencies();
+      resetHooksAfterThrow(); // Don't reset current debug fiber, since we're about to work on the
+      // same fiber again.
+      // Unwind the failed stack frame
+
+      unwindInterruptedWork(unitOfWork); // Restore the original properties of the fiber.
+
+      assignFiberPropertiesInDEV(unitOfWork, originalWorkInProgressCopy);
+
+      if ( unitOfWork.mode & ProfileMode) {
+        // Reset the profiler timer.
+        startProfilerTimer(unitOfWork);
+      } // Run beginWork again.
+
+
+      invokeGuardedCallback(null, beginWork, null, current, unitOfWork, expirationTime);
+
+      if (hasCaughtError()) {
+        var replayError = clearCaughtError(); // `invokeGuardedCallback` sometimes sets an expando `_suppressLogging`.
+        // Rethrow this error instead of the original one.
+
+        throw replayError;
+      } else {
+        // This branch is reachable if the render phase is impure.
+        throw originalError;
+      }
+    }
+  };
+}
+
+var didWarnAboutUpdateInRender = false;
+var didWarnAboutUpdateInRenderForAnotherComponent;
+
+{
+  didWarnAboutUpdateInRenderForAnotherComponent = new Set();
+}
+
+function warnAboutRenderPhaseUpdatesInDEV(fiber) {
+  {
+    if (isRendering && (executionContext & RenderContext) !== NoContext) {
+      switch (fiber.tag) {
+        case FunctionComponent:
+        case ForwardRef:
+        case SimpleMemoComponent:
+          {
+            var renderingComponentName = workInProgress && getComponentName(workInProgress.type) || 'Unknown'; // Dedupe by the rendering component because it's the one that needs to be fixed.
+
+            var dedupeKey = renderingComponentName;
+
+            if (!didWarnAboutUpdateInRenderForAnotherComponent.has(dedupeKey)) {
+              didWarnAboutUpdateInRenderForAnotherComponent.add(dedupeKey);
+              var setStateComponentName = getComponentName(fiber.type) || 'Unknown';
+
+              error('Cannot update a component (`%s`) while rendering a ' + 'different component (`%s`). To locate the bad setState() call inside `%s`, ' + 'follow the stack trace as described in https://fb.me/setstate-in-render', setStateComponentName, renderingComponentName, renderingComponentName);
+            }
+
+            break;
+          }
+
+        case ClassComponent:
+          {
+            if (!didWarnAboutUpdateInRender) {
+              error('Cannot update during an existing state transition (such as ' + 'within `render`). Render methods should be a pure ' + 'function of props and state.');
+
+              didWarnAboutUpdate
