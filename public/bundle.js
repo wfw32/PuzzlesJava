@@ -69249,4 +69249,300 @@ function commitBeforeMutationEffects() {
       }
     }
 
-    nextEffect = nextEffect
+    nextEffect = nextEffect.nextEffect;
+  }
+}
+
+function commitMutationEffects(root, renderPriorityLevel) {
+  // TODO: Should probably move the bulk of this function to commitWork.
+  while (nextEffect !== null) {
+    setCurrentFiber(nextEffect);
+    var effectTag = nextEffect.effectTag;
+
+    if (effectTag & ContentReset) {
+      commitResetTextContent(nextEffect);
+    }
+
+    if (effectTag & Ref) {
+      var current = nextEffect.alternate;
+
+      if (current !== null) {
+        commitDetachRef(current);
+      }
+    } // The following switch statement is only concerned about placement,
+    // updates, and deletions. To avoid needing to add a case for every possible
+    // bitmap value, we remove the secondary effects from the effect tag and
+    // switch on that value.
+
+
+    var primaryEffectTag = effectTag & (Placement | Update | Deletion | Hydrating);
+
+    switch (primaryEffectTag) {
+      case Placement:
+        {
+          commitPlacement(nextEffect); // Clear the "placement" from effect tag so that we know that this is
+          // inserted, before any life-cycles like componentDidMount gets called.
+          // TODO: findDOMNode doesn't rely on this any more but isMounted does
+          // and isMounted is deprecated anyway so we should be able to kill this.
+
+          nextEffect.effectTag &= ~Placement;
+          break;
+        }
+
+      case PlacementAndUpdate:
+        {
+          // Placement
+          commitPlacement(nextEffect); // Clear the "placement" from effect tag so that we know that this is
+          // inserted, before any life-cycles like componentDidMount gets called.
+
+          nextEffect.effectTag &= ~Placement; // Update
+
+          var _current = nextEffect.alternate;
+          commitWork(_current, nextEffect);
+          break;
+        }
+
+      case Hydrating:
+        {
+          nextEffect.effectTag &= ~Hydrating;
+          break;
+        }
+
+      case HydratingAndUpdate:
+        {
+          nextEffect.effectTag &= ~Hydrating; // Update
+
+          var _current2 = nextEffect.alternate;
+          commitWork(_current2, nextEffect);
+          break;
+        }
+
+      case Update:
+        {
+          var _current3 = nextEffect.alternate;
+          commitWork(_current3, nextEffect);
+          break;
+        }
+
+      case Deletion:
+        {
+          commitDeletion(root, nextEffect, renderPriorityLevel);
+          break;
+        }
+    } // TODO: Only record a mutation effect if primaryEffectTag is non-zero.
+
+
+    recordEffect();
+    resetCurrentFiber();
+    nextEffect = nextEffect.nextEffect;
+  }
+}
+
+function commitLayoutEffects(root, committedExpirationTime) {
+  // TODO: Should probably move the bulk of this function to commitWork.
+  while (nextEffect !== null) {
+    setCurrentFiber(nextEffect);
+    var effectTag = nextEffect.effectTag;
+
+    if (effectTag & (Update | Callback)) {
+      recordEffect();
+      var current = nextEffect.alternate;
+      commitLifeCycles(root, current, nextEffect);
+    }
+
+    if (effectTag & Ref) {
+      recordEffect();
+      commitAttachRef(nextEffect);
+    }
+
+    resetCurrentFiber();
+    nextEffect = nextEffect.nextEffect;
+  }
+}
+
+function flushPassiveEffects() {
+  if (pendingPassiveEffectsRenderPriority !== NoPriority) {
+    var priorityLevel = pendingPassiveEffectsRenderPriority > NormalPriority ? NormalPriority : pendingPassiveEffectsRenderPriority;
+    pendingPassiveEffectsRenderPriority = NoPriority;
+    return runWithPriority$1(priorityLevel, flushPassiveEffectsImpl);
+  }
+}
+
+function flushPassiveEffectsImpl() {
+  if (rootWithPendingPassiveEffects === null) {
+    return false;
+  }
+
+  var root = rootWithPendingPassiveEffects;
+  var expirationTime = pendingPassiveEffectsExpirationTime;
+  rootWithPendingPassiveEffects = null;
+  pendingPassiveEffectsExpirationTime = NoWork;
+
+  if (!((executionContext & (RenderContext | CommitContext)) === NoContext)) {
+    {
+      throw Error( "Cannot flush passive effects while already rendering." );
+    }
+  }
+
+  var prevExecutionContext = executionContext;
+  executionContext |= CommitContext;
+  var prevInteractions = pushInteractions(root);
+
+  {
+    // Note: This currently assumes there are no passive effects on the root fiber
+    // because the root is not part of its own effect list.
+    // This could change in the future.
+    var _effect2 = root.current.firstEffect;
+
+    while (_effect2 !== null) {
+      {
+        setCurrentFiber(_effect2);
+        invokeGuardedCallback(null, commitPassiveHookEffects, null, _effect2);
+
+        if (hasCaughtError()) {
+          if (!(_effect2 !== null)) {
+            {
+              throw Error( "Should be working on an effect." );
+            }
+          }
+
+          var _error5 = clearCaughtError();
+
+          captureCommitPhaseError(_effect2, _error5);
+        }
+
+        resetCurrentFiber();
+      }
+
+      var nextNextEffect = _effect2.nextEffect; // Remove nextEffect pointer to assist GC
+
+      _effect2.nextEffect = null;
+      _effect2 = nextNextEffect;
+    }
+  }
+
+  {
+    popInteractions(prevInteractions);
+    finishPendingInteractions(root, expirationTime);
+  }
+
+  executionContext = prevExecutionContext;
+  flushSyncCallbackQueue(); // If additional passive effects were scheduled, increment a counter. If this
+  // exceeds the limit, we'll fire a warning.
+
+  nestedPassiveUpdateCount = rootWithPendingPassiveEffects === null ? 0 : nestedPassiveUpdateCount + 1;
+  return true;
+}
+
+function isAlreadyFailedLegacyErrorBoundary(instance) {
+  return legacyErrorBoundariesThatAlreadyFailed !== null && legacyErrorBoundariesThatAlreadyFailed.has(instance);
+}
+function markLegacyErrorBoundaryAsFailed(instance) {
+  if (legacyErrorBoundariesThatAlreadyFailed === null) {
+    legacyErrorBoundariesThatAlreadyFailed = new Set([instance]);
+  } else {
+    legacyErrorBoundariesThatAlreadyFailed.add(instance);
+  }
+}
+
+function prepareToThrowUncaughtError(error) {
+  if (!hasUncaughtError) {
+    hasUncaughtError = true;
+    firstUncaughtError = error;
+  }
+}
+
+var onUncaughtError = prepareToThrowUncaughtError;
+
+function captureCommitPhaseErrorOnRoot(rootFiber, sourceFiber, error) {
+  var errorInfo = createCapturedValue(error, sourceFiber);
+  var update = createRootErrorUpdate(rootFiber, errorInfo, Sync);
+  enqueueUpdate(rootFiber, update);
+  var root = markUpdateTimeFromFiberToRoot(rootFiber, Sync);
+
+  if (root !== null) {
+    ensureRootIsScheduled(root);
+    schedulePendingInteractions(root, Sync);
+  }
+}
+
+function captureCommitPhaseError(sourceFiber, error) {
+  if (sourceFiber.tag === HostRoot) {
+    // Error was thrown at the root. There is no parent, so the root
+    // itself should capture it.
+    captureCommitPhaseErrorOnRoot(sourceFiber, sourceFiber, error);
+    return;
+  }
+
+  var fiber = sourceFiber.return;
+
+  while (fiber !== null) {
+    if (fiber.tag === HostRoot) {
+      captureCommitPhaseErrorOnRoot(fiber, sourceFiber, error);
+      return;
+    } else if (fiber.tag === ClassComponent) {
+      var ctor = fiber.type;
+      var instance = fiber.stateNode;
+
+      if (typeof ctor.getDerivedStateFromError === 'function' || typeof instance.componentDidCatch === 'function' && !isAlreadyFailedLegacyErrorBoundary(instance)) {
+        var errorInfo = createCapturedValue(error, sourceFiber);
+        var update = createClassErrorUpdate(fiber, errorInfo, // TODO: This is always sync
+        Sync);
+        enqueueUpdate(fiber, update);
+        var root = markUpdateTimeFromFiberToRoot(fiber, Sync);
+
+        if (root !== null) {
+          ensureRootIsScheduled(root);
+          schedulePendingInteractions(root, Sync);
+        }
+
+        return;
+      }
+    }
+
+    fiber = fiber.return;
+  }
+}
+function pingSuspendedRoot(root, thenable, suspendedTime) {
+  var pingCache = root.pingCache;
+
+  if (pingCache !== null) {
+    // The thenable resolved, so we no longer need to memoize, because it will
+    // never be thrown again.
+    pingCache.delete(thenable);
+  }
+
+  if (workInProgressRoot === root && renderExpirationTime$1 === suspendedTime) {
+    // Received a ping at the same priority level at which we're currently
+    // rendering. We might want to restart this render. This should mirror
+    // the logic of whether or not a root suspends once it completes.
+    // TODO: If we're rendering sync either due to Sync, Batched or expired,
+    // we should probably never restart.
+    // If we're suspended with delay, we'll always suspend so we can always
+    // restart. If we're suspended without any updates, it might be a retry.
+    // If it's early in the retry we can restart. We can't know for sure
+    // whether we'll eventually process an update during this render pass,
+    // but it's somewhat unlikely that we get to a ping before that, since
+    // getting to the root most update is usually very fast.
+    if (workInProgressRootExitStatus === RootSuspendedWithDelay || workInProgressRootExitStatus === RootSuspended && workInProgressRootLatestProcessedExpirationTime === Sync && now() - globalMostRecentFallbackTime < FALLBACK_THROTTLE_MS) {
+      // Restart from the root. Don't need to schedule a ping because
+      // we're already working on this tree.
+      prepareFreshStack(root, renderExpirationTime$1);
+    } else {
+      // Even though we can't restart right now, we might get an
+      // opportunity later. So we mark this render as having a ping.
+      workInProgressRootHasPendingPing = true;
+    }
+
+    return;
+  }
+
+  if (!isRootSuspendedAtTime(root, suspendedTime)) {
+    // The root is no longer suspended at this time.
+    return;
+  }
+
+  var lastPingedTime = root.lastPingedTime;
+
+  if (lastPingedTime !== NoWork && lastPingedTime < suspendedTime) {
+    // The
