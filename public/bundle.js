@@ -69796,4 +69796,245 @@ function warnAboutRenderPhaseUpdatesInDEV(fiber) {
             if (!didWarnAboutUpdateInRender) {
               error('Cannot update during an existing state transition (such as ' + 'within `render`). Render methods should be a pure ' + 'function of props and state.');
 
-              didWarnAboutUpdate
+              didWarnAboutUpdateInRender = true;
+            }
+
+            break;
+          }
+      }
+    }
+  }
+} // a 'shared' variable that changes when act() opens/closes in tests.
+
+
+var IsThisRendererActing = {
+  current: false
+};
+function warnIfNotScopedWithMatchingAct(fiber) {
+  {
+    if ( IsSomeRendererActing.current === true && IsThisRendererActing.current !== true) {
+      error("It looks like you're using the wrong act() around your test interactions.\n" + 'Be sure to use the matching version of act() corresponding to your renderer:\n\n' + '// for react-dom:\n' + "import {act} from 'react-dom/test-utils';\n" + '// ...\n' + 'act(() => ...);\n\n' + '// for react-test-renderer:\n' + "import TestRenderer from 'react-test-renderer';\n" + 'const {act} = TestRenderer;\n' + '// ...\n' + 'act(() => ...);' + '%s', getStackByFiberInDevAndProd(fiber));
+    }
+  }
+}
+function warnIfNotCurrentlyActingEffectsInDEV(fiber) {
+  {
+    if ( (fiber.mode & StrictMode) !== NoMode && IsSomeRendererActing.current === false && IsThisRendererActing.current === false) {
+      error('An update to %s ran an effect, but was not wrapped in act(...).\n\n' + 'When testing, code that causes React state updates should be ' + 'wrapped into act(...):\n\n' + 'act(() => {\n' + '  /* fire events that update state */\n' + '});\n' + '/* assert on the output */\n\n' + "This ensures that you're testing the behavior the user would see " + 'in the browser.' + ' Learn more at https://fb.me/react-wrap-tests-with-act' + '%s', getComponentName(fiber.type), getStackByFiberInDevAndProd(fiber));
+    }
+  }
+}
+
+function warnIfNotCurrentlyActingUpdatesInDEV(fiber) {
+  {
+    if ( executionContext === NoContext && IsSomeRendererActing.current === false && IsThisRendererActing.current === false) {
+      error('An update to %s inside a test was not wrapped in act(...).\n\n' + 'When testing, code that causes React state updates should be ' + 'wrapped into act(...):\n\n' + 'act(() => {\n' + '  /* fire events that update state */\n' + '});\n' + '/* assert on the output */\n\n' + "This ensures that you're testing the behavior the user would see " + 'in the browser.' + ' Learn more at https://fb.me/react-wrap-tests-with-act' + '%s', getComponentName(fiber.type), getStackByFiberInDevAndProd(fiber));
+    }
+  }
+}
+
+var warnIfNotCurrentlyActingUpdatesInDev = warnIfNotCurrentlyActingUpdatesInDEV; // In tests, we want to enforce a mocked scheduler.
+
+var didWarnAboutUnmockedScheduler = false; // TODO Before we release concurrent mode, revisit this and decide whether a mocked
+// scheduler is the actual recommendation. The alternative could be a testing build,
+// a new lib, or whatever; we dunno just yet. This message is for early adopters
+// to get their tests right.
+
+function warnIfUnmockedScheduler(fiber) {
+  {
+    if (didWarnAboutUnmockedScheduler === false && Scheduler.unstable_flushAllWithoutAsserting === undefined) {
+      if (fiber.mode & BlockingMode || fiber.mode & ConcurrentMode) {
+        didWarnAboutUnmockedScheduler = true;
+
+        error('In Concurrent or Sync modes, the "scheduler" module needs to be mocked ' + 'to guarantee consistent behaviour across tests and browsers. ' + 'For example, with jest: \n' + "jest.mock('scheduler', () => require('scheduler/unstable_mock'));\n\n" + 'For more info, visit https://fb.me/react-mock-scheduler');
+      }
+    }
+  }
+}
+
+function computeThreadID(root, expirationTime) {
+  // Interaction threads are unique per root and expiration time.
+  return expirationTime * 1000 + root.interactionThreadID;
+}
+
+function markSpawnedWork(expirationTime) {
+
+  if (spawnedWorkDuringRender === null) {
+    spawnedWorkDuringRender = [expirationTime];
+  } else {
+    spawnedWorkDuringRender.push(expirationTime);
+  }
+}
+
+function scheduleInteractions(root, expirationTime, interactions) {
+
+  if (interactions.size > 0) {
+    var pendingInteractionMap = root.pendingInteractionMap;
+    var pendingInteractions = pendingInteractionMap.get(expirationTime);
+
+    if (pendingInteractions != null) {
+      interactions.forEach(function (interaction) {
+        if (!pendingInteractions.has(interaction)) {
+          // Update the pending async work count for previously unscheduled interaction.
+          interaction.__count++;
+        }
+
+        pendingInteractions.add(interaction);
+      });
+    } else {
+      pendingInteractionMap.set(expirationTime, new Set(interactions)); // Update the pending async work count for the current interactions.
+
+      interactions.forEach(function (interaction) {
+        interaction.__count++;
+      });
+    }
+
+    var subscriber = tracing.__subscriberRef.current;
+
+    if (subscriber !== null) {
+      var threadID = computeThreadID(root, expirationTime);
+      subscriber.onWorkScheduled(interactions, threadID);
+    }
+  }
+}
+
+function schedulePendingInteractions(root, expirationTime) {
+
+  scheduleInteractions(root, expirationTime, tracing.__interactionsRef.current);
+}
+
+function startWorkOnPendingInteractions(root, expirationTime) {
+  // we can accurately attribute time spent working on it, And so that cascading
+  // work triggered during the render phase will be associated with it.
+
+
+  var interactions = new Set();
+  root.pendingInteractionMap.forEach(function (scheduledInteractions, scheduledExpirationTime) {
+    if (scheduledExpirationTime >= expirationTime) {
+      scheduledInteractions.forEach(function (interaction) {
+        return interactions.add(interaction);
+      });
+    }
+  }); // Store the current set of interactions on the FiberRoot for a few reasons:
+  // We can re-use it in hot functions like performConcurrentWorkOnRoot()
+  // without having to recalculate it. We will also use it in commitWork() to
+  // pass to any Profiler onRender() hooks. This also provides DevTools with a
+  // way to access it when the onCommitRoot() hook is called.
+
+  root.memoizedInteractions = interactions;
+
+  if (interactions.size > 0) {
+    var subscriber = tracing.__subscriberRef.current;
+
+    if (subscriber !== null) {
+      var threadID = computeThreadID(root, expirationTime);
+
+      try {
+        subscriber.onWorkStarted(interactions, threadID);
+      } catch (error) {
+        // If the subscriber throws, rethrow it in a separate task
+        scheduleCallback(ImmediatePriority, function () {
+          throw error;
+        });
+      }
+    }
+  }
+}
+
+function finishPendingInteractions(root, committedExpirationTime) {
+
+  var earliestRemainingTimeAfterCommit = root.firstPendingTime;
+  var subscriber;
+
+  try {
+    subscriber = tracing.__subscriberRef.current;
+
+    if (subscriber !== null && root.memoizedInteractions.size > 0) {
+      var threadID = computeThreadID(root, committedExpirationTime);
+      subscriber.onWorkStopped(root.memoizedInteractions, threadID);
+    }
+  } catch (error) {
+    // If the subscriber throws, rethrow it in a separate task
+    scheduleCallback(ImmediatePriority, function () {
+      throw error;
+    });
+  } finally {
+    // Clear completed interactions from the pending Map.
+    // Unless the render was suspended or cascading work was scheduled,
+    // In which case– leave pending interactions until the subsequent render.
+    var pendingInteractionMap = root.pendingInteractionMap;
+    pendingInteractionMap.forEach(function (scheduledInteractions, scheduledExpirationTime) {
+      // Only decrement the pending interaction count if we're done.
+      // If there's still work at the current priority,
+      // That indicates that we are waiting for suspense data.
+      if (scheduledExpirationTime > earliestRemainingTimeAfterCommit) {
+        pendingInteractionMap.delete(scheduledExpirationTime);
+        scheduledInteractions.forEach(function (interaction) {
+          interaction.__count--;
+
+          if (subscriber !== null && interaction.__count === 0) {
+            try {
+              subscriber.onInteractionScheduledWorkCompleted(interaction);
+            } catch (error) {
+              // If the subscriber throws, rethrow it in a separate task
+              scheduleCallback(ImmediatePriority, function () {
+                throw error;
+              });
+            }
+          }
+        });
+      }
+    });
+  }
+}
+
+var onScheduleFiberRoot = null;
+var onCommitFiberRoot = null;
+var onCommitFiberUnmount = null;
+var hasLoggedError = false;
+var isDevToolsPresent = typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined';
+function injectInternals(internals) {
+  if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === 'undefined') {
+    // No DevTools
+    return false;
+  }
+
+  var hook = __REACT_DEVTOOLS_GLOBAL_HOOK__;
+
+  if (hook.isDisabled) {
+    // This isn't a real property on the hook, but it can be set to opt out
+    // of DevTools integration and associated warnings and logs.
+    // https://github.com/facebook/react/issues/3877
+    return true;
+  }
+
+  if (!hook.supportsFiber) {
+    {
+      error('The installed version of React DevTools is too old and will not work ' + 'with the current version of React. Please update React DevTools. ' + 'https://fb.me/react-devtools');
+    } // DevTools exists, even though it doesn't support Fiber.
+
+
+    return true;
+  }
+
+  try {
+    var rendererID = hook.inject(internals); // We have successfully injected, so now it is safe to set up hooks.
+
+    if (true) {
+      // Only used by Fast Refresh
+      if (typeof hook.onScheduleFiberRoot === 'function') {
+        onScheduleFiberRoot = function (root, children) {
+          try {
+            hook.onScheduleFiberRoot(rendererID, root, children);
+          } catch (err) {
+            if ( true && !hasLoggedError) {
+              hasLoggedError = true;
+
+              error('React instrumentation encountered an error: %s', err);
+            }
+          }
+        };
+      }
+    }
+
+    onCommitFiberRoot = function (root, expiratio
