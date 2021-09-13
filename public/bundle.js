@@ -70324,4 +70324,284 @@ function createWorkInProgress(current, pendingProps) {
 
       case ForwardRef:
         workInProgress.type = resolveForwardRefForHotReloading(current.type);
-     
+        break;
+    }
+  }
+
+  return workInProgress;
+} // Used to reuse a Fiber for a second pass.
+
+function resetWorkInProgress(workInProgress, renderExpirationTime) {
+  // This resets the Fiber to what createFiber or createWorkInProgress would
+  // have set the values to before during the first pass. Ideally this wouldn't
+  // be necessary but unfortunately many code paths reads from the workInProgress
+  // when they should be reading from current and writing to workInProgress.
+  // We assume pendingProps, index, key, ref, return are still untouched to
+  // avoid doing another reconciliation.
+  // Reset the effect tag but keep any Placement tags, since that's something
+  // that child fiber is setting, not the reconciliation.
+  workInProgress.effectTag &= Placement; // The effect list is no longer valid.
+
+  workInProgress.nextEffect = null;
+  workInProgress.firstEffect = null;
+  workInProgress.lastEffect = null;
+  var current = workInProgress.alternate;
+
+  if (current === null) {
+    // Reset to createFiber's initial values.
+    workInProgress.childExpirationTime = NoWork;
+    workInProgress.expirationTime = renderExpirationTime;
+    workInProgress.child = null;
+    workInProgress.memoizedProps = null;
+    workInProgress.memoizedState = null;
+    workInProgress.updateQueue = null;
+    workInProgress.dependencies = null;
+
+    {
+      // Note: We don't reset the actualTime counts. It's useful to accumulate
+      // actual time across multiple render passes.
+      workInProgress.selfBaseDuration = 0;
+      workInProgress.treeBaseDuration = 0;
+    }
+  } else {
+    // Reset to the cloned values that createWorkInProgress would've.
+    workInProgress.childExpirationTime = current.childExpirationTime;
+    workInProgress.expirationTime = current.expirationTime;
+    workInProgress.child = current.child;
+    workInProgress.memoizedProps = current.memoizedProps;
+    workInProgress.memoizedState = current.memoizedState;
+    workInProgress.updateQueue = current.updateQueue; // Clone the dependencies object. This is mutated during the render phase, so
+    // it cannot be shared with the current fiber.
+
+    var currentDependencies = current.dependencies;
+    workInProgress.dependencies = currentDependencies === null ? null : {
+      expirationTime: currentDependencies.expirationTime,
+      firstContext: currentDependencies.firstContext,
+      responders: currentDependencies.responders
+    };
+
+    {
+      // Note: We don't reset the actualTime counts. It's useful to accumulate
+      // actual time across multiple render passes.
+      workInProgress.selfBaseDuration = current.selfBaseDuration;
+      workInProgress.treeBaseDuration = current.treeBaseDuration;
+    }
+  }
+
+  return workInProgress;
+}
+function createHostRootFiber(tag) {
+  var mode;
+
+  if (tag === ConcurrentRoot) {
+    mode = ConcurrentMode | BlockingMode | StrictMode;
+  } else if (tag === BlockingRoot) {
+    mode = BlockingMode | StrictMode;
+  } else {
+    mode = NoMode;
+  }
+
+  if ( isDevToolsPresent) {
+    // Always collect profile timings when DevTools are present.
+    // This enables DevTools to start capturing timing at any point–
+    // Without some nodes in the tree having empty base times.
+    mode |= ProfileMode;
+  }
+
+  return createFiber(HostRoot, null, null, mode);
+}
+function createFiberFromTypeAndProps(type, // React$ElementType
+key, pendingProps, owner, mode, expirationTime) {
+  var fiber;
+  var fiberTag = IndeterminateComponent; // The resolved type is set if we know what the final type will be. I.e. it's not lazy.
+
+  var resolvedType = type;
+
+  if (typeof type === 'function') {
+    if (shouldConstruct(type)) {
+      fiberTag = ClassComponent;
+
+      {
+        resolvedType = resolveClassForHotReloading(resolvedType);
+      }
+    } else {
+      {
+        resolvedType = resolveFunctionForHotReloading(resolvedType);
+      }
+    }
+  } else if (typeof type === 'string') {
+    fiberTag = HostComponent;
+  } else {
+    getTag: switch (type) {
+      case REACT_FRAGMENT_TYPE:
+        return createFiberFromFragment(pendingProps.children, mode, expirationTime, key);
+
+      case REACT_CONCURRENT_MODE_TYPE:
+        fiberTag = Mode;
+        mode |= ConcurrentMode | BlockingMode | StrictMode;
+        break;
+
+      case REACT_STRICT_MODE_TYPE:
+        fiberTag = Mode;
+        mode |= StrictMode;
+        break;
+
+      case REACT_PROFILER_TYPE:
+        return createFiberFromProfiler(pendingProps, mode, expirationTime, key);
+
+      case REACT_SUSPENSE_TYPE:
+        return createFiberFromSuspense(pendingProps, mode, expirationTime, key);
+
+      case REACT_SUSPENSE_LIST_TYPE:
+        return createFiberFromSuspenseList(pendingProps, mode, expirationTime, key);
+
+      default:
+        {
+          if (typeof type === 'object' && type !== null) {
+            switch (type.$$typeof) {
+              case REACT_PROVIDER_TYPE:
+                fiberTag = ContextProvider;
+                break getTag;
+
+              case REACT_CONTEXT_TYPE:
+                // This is a consumer
+                fiberTag = ContextConsumer;
+                break getTag;
+
+              case REACT_FORWARD_REF_TYPE:
+                fiberTag = ForwardRef;
+
+                {
+                  resolvedType = resolveForwardRefForHotReloading(resolvedType);
+                }
+
+                break getTag;
+
+              case REACT_MEMO_TYPE:
+                fiberTag = MemoComponent;
+                break getTag;
+
+              case REACT_LAZY_TYPE:
+                fiberTag = LazyComponent;
+                resolvedType = null;
+                break getTag;
+
+              case REACT_BLOCK_TYPE:
+                fiberTag = Block;
+                break getTag;
+
+            }
+          }
+
+          var info = '';
+
+          {
+            if (type === undefined || typeof type === 'object' && type !== null && Object.keys(type).length === 0) {
+              info += ' You likely forgot to export your component from the file ' + "it's defined in, or you might have mixed up default and " + 'named imports.';
+            }
+
+            var ownerName = owner ? getComponentName(owner.type) : null;
+
+            if (ownerName) {
+              info += '\n\nCheck the render method of `' + ownerName + '`.';
+            }
+          }
+
+          {
+            {
+              throw Error( "Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: " + (type == null ? type : typeof type) + "." + info );
+            }
+          }
+        }
+    }
+  }
+
+  fiber = createFiber(fiberTag, pendingProps, key, mode);
+  fiber.elementType = type;
+  fiber.type = resolvedType;
+  fiber.expirationTime = expirationTime;
+  return fiber;
+}
+function createFiberFromElement(element, mode, expirationTime) {
+  var owner = null;
+
+  {
+    owner = element._owner;
+  }
+
+  var type = element.type;
+  var key = element.key;
+  var pendingProps = element.props;
+  var fiber = createFiberFromTypeAndProps(type, key, pendingProps, owner, mode, expirationTime);
+
+  {
+    fiber._debugSource = element._source;
+    fiber._debugOwner = element._owner;
+  }
+
+  return fiber;
+}
+function createFiberFromFragment(elements, mode, expirationTime, key) {
+  var fiber = createFiber(Fragment, elements, key, mode);
+  fiber.expirationTime = expirationTime;
+  return fiber;
+}
+
+function createFiberFromProfiler(pendingProps, mode, expirationTime, key) {
+  {
+    if (typeof pendingProps.id !== 'string' || typeof pendingProps.onRender !== 'function') {
+      error('Profiler must specify an "id" string and "onRender" function as props');
+    }
+  }
+
+  var fiber = createFiber(Profiler, pendingProps, key, mode | ProfileMode); // TODO: The Profiler fiber shouldn't have a type. It has a tag.
+
+  fiber.elementType = REACT_PROFILER_TYPE;
+  fiber.type = REACT_PROFILER_TYPE;
+  fiber.expirationTime = expirationTime;
+  return fiber;
+}
+
+function createFiberFromSuspense(pendingProps, mode, expirationTime, key) {
+  var fiber = createFiber(SuspenseComponent, pendingProps, key, mode); // TODO: The SuspenseComponent fiber shouldn't have a type. It has a tag.
+  // This needs to be fixed in getComponentName so that it relies on the tag
+  // instead.
+
+  fiber.type = REACT_SUSPENSE_TYPE;
+  fiber.elementType = REACT_SUSPENSE_TYPE;
+  fiber.expirationTime = expirationTime;
+  return fiber;
+}
+function createFiberFromSuspenseList(pendingProps, mode, expirationTime, key) {
+  var fiber = createFiber(SuspenseListComponent, pendingProps, key, mode);
+
+  {
+    // TODO: The SuspenseListComponent fiber shouldn't have a type. It has a tag.
+    // This needs to be fixed in getComponentName so that it relies on the tag
+    // instead.
+    fiber.type = REACT_SUSPENSE_LIST_TYPE;
+  }
+
+  fiber.elementType = REACT_SUSPENSE_LIST_TYPE;
+  fiber.expirationTime = expirationTime;
+  return fiber;
+}
+function createFiberFromText(content, mode, expirationTime) {
+  var fiber = createFiber(HostText, content, null, mode);
+  fiber.expirationTime = expirationTime;
+  return fiber;
+}
+function createFiberFromHostInstanceForDeletion() {
+  var fiber = createFiber(HostComponent, null, null, NoMode); // TODO: These should not need a type.
+
+  fiber.elementType = 'DELETED';
+  fiber.type = 'DELETED';
+  return fiber;
+}
+function createFiberFromPortal(portal, mode, expirationTime) {
+  var pendingProps = portal.children !== null ? portal.children : [];
+  var fiber = createFiber(HostPortal, pendingProps, portal.key, mode);
+  fiber.expirationTime = expirationTime;
+  fiber.stateNode = {
+    containerInfo: portal.containerInfo,
+    pendingChildren:
