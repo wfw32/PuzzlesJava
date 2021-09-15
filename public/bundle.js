@@ -70604,4 +70604,287 @@ function createFiberFromPortal(portal, mode, expirationTime) {
   fiber.expirationTime = expirationTime;
   fiber.stateNode = {
     containerInfo: portal.containerInfo,
-    pendingChildren:
+    pendingChildren: null,
+    // Used by persistent updates
+    implementation: portal.implementation
+  };
+  return fiber;
+} // Used for stashing WIP properties to replay failed work in DEV.
+
+function assignFiberPropertiesInDEV(target, source) {
+  if (target === null) {
+    // This Fiber's initial properties will always be overwritten.
+    // We only use a Fiber to ensure the same hidden class so DEV isn't slow.
+    target = createFiber(IndeterminateComponent, null, null, NoMode);
+  } // This is intentionally written as a list of all properties.
+  // We tried to use Object.assign() instead but this is called in
+  // the hottest path, and Object.assign() was too slow:
+  // https://github.com/facebook/react/issues/12502
+  // This code is DEV-only so size is not a concern.
+
+
+  target.tag = source.tag;
+  target.key = source.key;
+  target.elementType = source.elementType;
+  target.type = source.type;
+  target.stateNode = source.stateNode;
+  target.return = source.return;
+  target.child = source.child;
+  target.sibling = source.sibling;
+  target.index = source.index;
+  target.ref = source.ref;
+  target.pendingProps = source.pendingProps;
+  target.memoizedProps = source.memoizedProps;
+  target.updateQueue = source.updateQueue;
+  target.memoizedState = source.memoizedState;
+  target.dependencies = source.dependencies;
+  target.mode = source.mode;
+  target.effectTag = source.effectTag;
+  target.nextEffect = source.nextEffect;
+  target.firstEffect = source.firstEffect;
+  target.lastEffect = source.lastEffect;
+  target.expirationTime = source.expirationTime;
+  target.childExpirationTime = source.childExpirationTime;
+  target.alternate = source.alternate;
+
+  {
+    target.actualDuration = source.actualDuration;
+    target.actualStartTime = source.actualStartTime;
+    target.selfBaseDuration = source.selfBaseDuration;
+    target.treeBaseDuration = source.treeBaseDuration;
+  }
+
+  {
+    target._debugID = source._debugID;
+  }
+
+  target._debugSource = source._debugSource;
+  target._debugOwner = source._debugOwner;
+  target._debugIsCurrentlyTiming = source._debugIsCurrentlyTiming;
+  target._debugNeedsRemount = source._debugNeedsRemount;
+  target._debugHookTypes = source._debugHookTypes;
+  return target;
+}
+
+function FiberRootNode(containerInfo, tag, hydrate) {
+  this.tag = tag;
+  this.current = null;
+  this.containerInfo = containerInfo;
+  this.pendingChildren = null;
+  this.pingCache = null;
+  this.finishedExpirationTime = NoWork;
+  this.finishedWork = null;
+  this.timeoutHandle = noTimeout;
+  this.context = null;
+  this.pendingContext = null;
+  this.hydrate = hydrate;
+  this.callbackNode = null;
+  this.callbackPriority = NoPriority;
+  this.firstPendingTime = NoWork;
+  this.firstSuspendedTime = NoWork;
+  this.lastSuspendedTime = NoWork;
+  this.nextKnownPendingLevel = NoWork;
+  this.lastPingedTime = NoWork;
+  this.lastExpiredTime = NoWork;
+
+  {
+    this.interactionThreadID = tracing.unstable_getThreadID();
+    this.memoizedInteractions = new Set();
+    this.pendingInteractionMap = new Map();
+  }
+}
+
+function createFiberRoot(containerInfo, tag, hydrate, hydrationCallbacks) {
+  var root = new FiberRootNode(containerInfo, tag, hydrate);
+  // stateNode is any.
+
+
+  var uninitializedFiber = createHostRootFiber(tag);
+  root.current = uninitializedFiber;
+  uninitializedFiber.stateNode = root;
+  initializeUpdateQueue(uninitializedFiber);
+  return root;
+}
+function isRootSuspendedAtTime(root, expirationTime) {
+  var firstSuspendedTime = root.firstSuspendedTime;
+  var lastSuspendedTime = root.lastSuspendedTime;
+  return firstSuspendedTime !== NoWork && firstSuspendedTime >= expirationTime && lastSuspendedTime <= expirationTime;
+}
+function markRootSuspendedAtTime(root, expirationTime) {
+  var firstSuspendedTime = root.firstSuspendedTime;
+  var lastSuspendedTime = root.lastSuspendedTime;
+
+  if (firstSuspendedTime < expirationTime) {
+    root.firstSuspendedTime = expirationTime;
+  }
+
+  if (lastSuspendedTime > expirationTime || firstSuspendedTime === NoWork) {
+    root.lastSuspendedTime = expirationTime;
+  }
+
+  if (expirationTime <= root.lastPingedTime) {
+    root.lastPingedTime = NoWork;
+  }
+
+  if (expirationTime <= root.lastExpiredTime) {
+    root.lastExpiredTime = NoWork;
+  }
+}
+function markRootUpdatedAtTime(root, expirationTime) {
+  // Update the range of pending times
+  var firstPendingTime = root.firstPendingTime;
+
+  if (expirationTime > firstPendingTime) {
+    root.firstPendingTime = expirationTime;
+  } // Update the range of suspended times. Treat everything lower priority or
+  // equal to this update as unsuspended.
+
+
+  var firstSuspendedTime = root.firstSuspendedTime;
+
+  if (firstSuspendedTime !== NoWork) {
+    if (expirationTime >= firstSuspendedTime) {
+      // The entire suspended range is now unsuspended.
+      root.firstSuspendedTime = root.lastSuspendedTime = root.nextKnownPendingLevel = NoWork;
+    } else if (expirationTime >= root.lastSuspendedTime) {
+      root.lastSuspendedTime = expirationTime + 1;
+    } // This is a pending level. Check if it's higher priority than the next
+    // known pending level.
+
+
+    if (expirationTime > root.nextKnownPendingLevel) {
+      root.nextKnownPendingLevel = expirationTime;
+    }
+  }
+}
+function markRootFinishedAtTime(root, finishedExpirationTime, remainingExpirationTime) {
+  // Update the range of pending times
+  root.firstPendingTime = remainingExpirationTime; // Update the range of suspended times. Treat everything higher priority or
+  // equal to this update as unsuspended.
+
+  if (finishedExpirationTime <= root.lastSuspendedTime) {
+    // The entire suspended range is now unsuspended.
+    root.firstSuspendedTime = root.lastSuspendedTime = root.nextKnownPendingLevel = NoWork;
+  } else if (finishedExpirationTime <= root.firstSuspendedTime) {
+    // Part of the suspended range is now unsuspended. Narrow the range to
+    // include everything between the unsuspended time (non-inclusive) and the
+    // last suspended time.
+    root.firstSuspendedTime = finishedExpirationTime - 1;
+  }
+
+  if (finishedExpirationTime <= root.lastPingedTime) {
+    // Clear the pinged time
+    root.lastPingedTime = NoWork;
+  }
+
+  if (finishedExpirationTime <= root.lastExpiredTime) {
+    // Clear the expired time
+    root.lastExpiredTime = NoWork;
+  }
+}
+function markRootExpiredAtTime(root, expirationTime) {
+  var lastExpiredTime = root.lastExpiredTime;
+
+  if (lastExpiredTime === NoWork || lastExpiredTime > expirationTime) {
+    root.lastExpiredTime = expirationTime;
+  }
+}
+
+var didWarnAboutNestedUpdates;
+var didWarnAboutFindNodeInStrictMode;
+
+{
+  didWarnAboutNestedUpdates = false;
+  didWarnAboutFindNodeInStrictMode = {};
+}
+
+function getContextForSubtree(parentComponent) {
+  if (!parentComponent) {
+    return emptyContextObject;
+  }
+
+  var fiber = get(parentComponent);
+  var parentContext = findCurrentUnmaskedContext(fiber);
+
+  if (fiber.tag === ClassComponent) {
+    var Component = fiber.type;
+
+    if (isContextProvider(Component)) {
+      return processChildContext(fiber, Component, parentContext);
+    }
+  }
+
+  return parentContext;
+}
+
+function findHostInstanceWithWarning(component, methodName) {
+  {
+    var fiber = get(component);
+
+    if (fiber === undefined) {
+      if (typeof component.render === 'function') {
+        {
+          {
+            throw Error( "Unable to find node on an unmounted component." );
+          }
+        }
+      } else {
+        {
+          {
+            throw Error( "Argument appears to not be a ReactComponent. Keys: " + Object.keys(component) );
+          }
+        }
+      }
+    }
+
+    var hostFiber = findCurrentHostFiber(fiber);
+
+    if (hostFiber === null) {
+      return null;
+    }
+
+    if (hostFiber.mode & StrictMode) {
+      var componentName = getComponentName(fiber.type) || 'Component';
+
+      if (!didWarnAboutFindNodeInStrictMode[componentName]) {
+        didWarnAboutFindNodeInStrictMode[componentName] = true;
+
+        if (fiber.mode & StrictMode) {
+          error('%s is deprecated in StrictMode. ' + '%s was passed an instance of %s which is inside StrictMode. ' + 'Instead, add a ref directly to the element you want to reference. ' + 'Learn more about using refs safely here: ' + 'https://fb.me/react-strict-mode-find-node%s', methodName, methodName, componentName, getStackByFiberInDevAndProd(hostFiber));
+        } else {
+          error('%s is deprecated in StrictMode. ' + '%s was passed an instance of %s which renders StrictMode children. ' + 'Instead, add a ref directly to the element you want to reference. ' + 'Learn more about using refs safely here: ' + 'https://fb.me/react-strict-mode-find-node%s', methodName, methodName, componentName, getStackByFiberInDevAndProd(hostFiber));
+        }
+      }
+    }
+
+    return hostFiber.stateNode;
+  }
+}
+
+function createContainer(containerInfo, tag, hydrate, hydrationCallbacks) {
+  return createFiberRoot(containerInfo, tag, hydrate);
+}
+function updateContainer(element, container, parentComponent, callback) {
+  {
+    onScheduleRoot(container, element);
+  }
+
+  var current$1 = container.current;
+  var currentTime = requestCurrentTimeForUpdate();
+
+  {
+    // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
+    if ('undefined' !== typeof jest) {
+      warnIfUnmockedScheduler(current$1);
+      warnIfNotScopedWithMatchingAct(current$1);
+    }
+  }
+
+  var suspenseConfig = requestCurrentSuspenseConfig();
+  var expirationTime = computeExpirationForFiber(currentTime, current$1, suspenseConfig);
+  var context = getContextForSubtree(parentComponent);
+
+  if (container.context === null) {
+    container.context = context;
+  } else {
+    container.pend
