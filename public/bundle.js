@@ -70887,4 +70887,301 @@ function updateContainer(element, container, parentComponent, callback) {
   if (container.context === null) {
     container.context = context;
   } else {
-    container.pend
+    container.pendingContext = context;
+  }
+
+  {
+    if (isRendering && current !== null && !didWarnAboutNestedUpdates) {
+      didWarnAboutNestedUpdates = true;
+
+      error('Render methods should be a pure function of props and state; ' + 'triggering nested component updates from render is not allowed. ' + 'If necessary, trigger nested updates in componentDidUpdate.\n\n' + 'Check the render method of %s.', getComponentName(current.type) || 'Unknown');
+    }
+  }
+
+  var update = createUpdate(expirationTime, suspenseConfig); // Caution: React DevTools currently depends on this property
+  // being called "element".
+
+  update.payload = {
+    element: element
+  };
+  callback = callback === undefined ? null : callback;
+
+  if (callback !== null) {
+    {
+      if (typeof callback !== 'function') {
+        error('render(...): Expected the last optional `callback` argument to be a ' + 'function. Instead received: %s.', callback);
+      }
+    }
+
+    update.callback = callback;
+  }
+
+  enqueueUpdate(current$1, update);
+  scheduleWork(current$1, expirationTime);
+  return expirationTime;
+}
+function getPublicRootInstance(container) {
+  var containerFiber = container.current;
+
+  if (!containerFiber.child) {
+    return null;
+  }
+
+  switch (containerFiber.child.tag) {
+    case HostComponent:
+      return getPublicInstance(containerFiber.child.stateNode);
+
+    default:
+      return containerFiber.child.stateNode;
+  }
+}
+
+function markRetryTimeImpl(fiber, retryTime) {
+  var suspenseState = fiber.memoizedState;
+
+  if (suspenseState !== null && suspenseState.dehydrated !== null) {
+    if (suspenseState.retryTime < retryTime) {
+      suspenseState.retryTime = retryTime;
+    }
+  }
+} // Increases the priority of thennables when they resolve within this boundary.
+
+
+function markRetryTimeIfNotHydrated(fiber, retryTime) {
+  markRetryTimeImpl(fiber, retryTime);
+  var alternate = fiber.alternate;
+
+  if (alternate) {
+    markRetryTimeImpl(alternate, retryTime);
+  }
+}
+
+function attemptUserBlockingHydration$1(fiber) {
+  if (fiber.tag !== SuspenseComponent) {
+    // We ignore HostRoots here because we can't increase
+    // their priority and they should not suspend on I/O,
+    // since you have to wrap anything that might suspend in
+    // Suspense.
+    return;
+  }
+
+  var expTime = computeInteractiveExpiration(requestCurrentTimeForUpdate());
+  scheduleWork(fiber, expTime);
+  markRetryTimeIfNotHydrated(fiber, expTime);
+}
+function attemptContinuousHydration$1(fiber) {
+  if (fiber.tag !== SuspenseComponent) {
+    // We ignore HostRoots here because we can't increase
+    // their priority and they should not suspend on I/O,
+    // since you have to wrap anything that might suspend in
+    // Suspense.
+    return;
+  }
+
+  scheduleWork(fiber, ContinuousHydration);
+  markRetryTimeIfNotHydrated(fiber, ContinuousHydration);
+}
+function attemptHydrationAtCurrentPriority$1(fiber) {
+  if (fiber.tag !== SuspenseComponent) {
+    // We ignore HostRoots here because we can't increase
+    // their priority other than synchronously flush it.
+    return;
+  }
+
+  var currentTime = requestCurrentTimeForUpdate();
+  var expTime = computeExpirationForFiber(currentTime, fiber, null);
+  scheduleWork(fiber, expTime);
+  markRetryTimeIfNotHydrated(fiber, expTime);
+}
+function findHostInstanceWithNoPortals(fiber) {
+  var hostFiber = findCurrentHostFiberWithNoPortals(fiber);
+
+  if (hostFiber === null) {
+    return null;
+  }
+
+  if (hostFiber.tag === FundamentalComponent) {
+    return hostFiber.stateNode.instance;
+  }
+
+  return hostFiber.stateNode;
+}
+
+var shouldSuspendImpl = function (fiber) {
+  return false;
+};
+
+function shouldSuspend(fiber) {
+  return shouldSuspendImpl(fiber);
+}
+var overrideHookState = null;
+var overrideProps = null;
+var scheduleUpdate = null;
+var setSuspenseHandler = null;
+
+{
+  var copyWithSetImpl = function (obj, path, idx, value) {
+    if (idx >= path.length) {
+      return value;
+    }
+
+    var key = path[idx];
+    var updated = Array.isArray(obj) ? obj.slice() : _assign({}, obj); // $FlowFixMe number or string is fine here
+
+    updated[key] = copyWithSetImpl(obj[key], path, idx + 1, value);
+    return updated;
+  };
+
+  var copyWithSet = function (obj, path, value) {
+    return copyWithSetImpl(obj, path, 0, value);
+  }; // Support DevTools editable values for useState and useReducer.
+
+
+  overrideHookState = function (fiber, id, path, value) {
+    // For now, the "id" of stateful hooks is just the stateful hook index.
+    // This may change in the future with e.g. nested hooks.
+    var currentHook = fiber.memoizedState;
+
+    while (currentHook !== null && id > 0) {
+      currentHook = currentHook.next;
+      id--;
+    }
+
+    if (currentHook !== null) {
+      var newState = copyWithSet(currentHook.memoizedState, path, value);
+      currentHook.memoizedState = newState;
+      currentHook.baseState = newState; // We aren't actually adding an update to the queue,
+      // because there is no update we can add for useReducer hooks that won't trigger an error.
+      // (There's no appropriate action type for DevTools overrides.)
+      // As a result though, React will see the scheduled update as a noop and bailout.
+      // Shallow cloning props works as a workaround for now to bypass the bailout check.
+
+      fiber.memoizedProps = _assign({}, fiber.memoizedProps);
+      scheduleWork(fiber, Sync);
+    }
+  }; // Support DevTools props for function components, forwardRef, memo, host components, etc.
+
+
+  overrideProps = function (fiber, path, value) {
+    fiber.pendingProps = copyWithSet(fiber.memoizedProps, path, value);
+
+    if (fiber.alternate) {
+      fiber.alternate.pendingProps = fiber.pendingProps;
+    }
+
+    scheduleWork(fiber, Sync);
+  };
+
+  scheduleUpdate = function (fiber) {
+    scheduleWork(fiber, Sync);
+  };
+
+  setSuspenseHandler = function (newShouldSuspendImpl) {
+    shouldSuspendImpl = newShouldSuspendImpl;
+  };
+}
+
+function injectIntoDevTools(devToolsConfig) {
+  var findFiberByHostInstance = devToolsConfig.findFiberByHostInstance;
+  var ReactCurrentDispatcher = ReactSharedInternals.ReactCurrentDispatcher;
+  return injectInternals(_assign({}, devToolsConfig, {
+    overrideHookState: overrideHookState,
+    overrideProps: overrideProps,
+    setSuspenseHandler: setSuspenseHandler,
+    scheduleUpdate: scheduleUpdate,
+    currentDispatcherRef: ReactCurrentDispatcher,
+    findHostInstanceByFiber: function (fiber) {
+      var hostFiber = findCurrentHostFiber(fiber);
+
+      if (hostFiber === null) {
+        return null;
+      }
+
+      return hostFiber.stateNode;
+    },
+    findFiberByHostInstance: function (instance) {
+      if (!findFiberByHostInstance) {
+        // Might not be implemented by the renderer.
+        return null;
+      }
+
+      return findFiberByHostInstance(instance);
+    },
+    // React Refresh
+    findHostInstancesForRefresh:  findHostInstancesForRefresh ,
+    scheduleRefresh:  scheduleRefresh ,
+    scheduleRoot:  scheduleRoot ,
+    setRefreshHandler:  setRefreshHandler ,
+    // Enables DevTools to append owner stacks to error messages in DEV mode.
+    getCurrentFiber:  function () {
+      return current;
+    }
+  }));
+}
+var IsSomeRendererActing$1 = ReactSharedInternals.IsSomeRendererActing;
+
+function ReactDOMRoot(container, options) {
+  this._internalRoot = createRootImpl(container, ConcurrentRoot, options);
+}
+
+function ReactDOMBlockingRoot(container, tag, options) {
+  this._internalRoot = createRootImpl(container, tag, options);
+}
+
+ReactDOMRoot.prototype.render = ReactDOMBlockingRoot.prototype.render = function (children) {
+  var root = this._internalRoot;
+
+  {
+    if (typeof arguments[1] === 'function') {
+      error('render(...): does not support the second callback argument. ' + 'To execute a side effect after rendering, declare it in a component body with useEffect().');
+    }
+
+    var container = root.containerInfo;
+
+    if (container.nodeType !== COMMENT_NODE) {
+      var hostInstance = findHostInstanceWithNoPortals(root.current);
+
+      if (hostInstance) {
+        if (hostInstance.parentNode !== container) {
+          error('render(...): It looks like the React-rendered content of the ' + 'root container was removed without using React. This is not ' + 'supported and will cause errors. Instead, call ' + "root.unmount() to empty a root's container.");
+        }
+      }
+    }
+  }
+
+  updateContainer(children, root, null, null);
+};
+
+ReactDOMRoot.prototype.unmount = ReactDOMBlockingRoot.prototype.unmount = function () {
+  {
+    if (typeof arguments[0] === 'function') {
+      error('unmount(...): does not support a callback argument. ' + 'To execute a side effect after rendering, declare it in a component body with useEffect().');
+    }
+  }
+
+  var root = this._internalRoot;
+  var container = root.containerInfo;
+  updateContainer(null, root, null, function () {
+    unmarkContainerAsRoot(container);
+  });
+};
+
+function createRootImpl(container, tag, options) {
+  // Tag is either LegacyRoot or Concurrent Root
+  var hydrate = options != null && options.hydrate === true;
+  var hydrationCallbacks = options != null && options.hydrationOptions || null;
+  var root = createContainer(container, tag, hydrate);
+  markContainerAsRoot(root.current, container);
+
+  if (hydrate && tag !== LegacyRoot) {
+    var doc = container.nodeType === DOCUMENT_NODE ? container : container.ownerDocument;
+    eagerlyTrapReplayableEvents(container, doc);
+  }
+
+  return root;
+}
+function createLegacyRoot(container, options) {
+  return new ReactDOMBlockingRoot(container, LegacyRoot, options);
+}
+function isValidContainer(node) {
+  return !!(node && (node.nodeType === ELEMENT_NODE || node.nodeType === DOCUMENT_NODE || node.nodeType === DOCUMENT_FRAGMENT_NODE || node.nodeType === COMME
