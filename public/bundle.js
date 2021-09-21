@@ -71956,4 +71956,215 @@ function polyfill(Component) {
 
   // React <= 16.2 does not support static getDerivedStateFromProps.
   // As a workaround, use cWM and cWRP to invoke the new static lifecycle.
- 
+  // Newer versions of React will ignore these lifecycles if gDSFP exists.
+  if (typeof Component.getDerivedStateFromProps === 'function') {
+    prototype.componentWillMount = componentWillMount;
+    prototype.componentWillReceiveProps = componentWillReceiveProps;
+  }
+
+  // React <= 16.2 does not support getSnapshotBeforeUpdate.
+  // As a workaround, use cWU to invoke the new lifecycle.
+  // Newer versions of React will ignore that lifecycle if gSBU exists.
+  if (typeof prototype.getSnapshotBeforeUpdate === 'function') {
+    if (typeof prototype.componentDidUpdate !== 'function') {
+      throw new Error(
+        'Cannot polyfill getSnapshotBeforeUpdate() for components that do not define componentDidUpdate() on the prototype'
+      );
+    }
+
+    prototype.componentWillUpdate = componentWillUpdate;
+
+    var componentDidUpdate = prototype.componentDidUpdate;
+
+    prototype.componentDidUpdate = function componentDidUpdatePolyfill(
+      prevProps,
+      prevState,
+      maybeSnapshot
+    ) {
+      // 16.3+ will not execute our will-update method;
+      // It will pass a snapshot value to did-update though.
+      // Older versions will require our polyfilled will-update value.
+      // We need to handle both cases, but can't just check for the presence of "maybeSnapshot",
+      // Because for <= 15.x versions this might be a "prevContext" object.
+      // We also can't just check "__reactInternalSnapshot",
+      // Because get-snapshot might return a falsy value.
+      // So check for the explicit __reactInternalSnapshotFlag flag to determine behavior.
+      var snapshot = this.__reactInternalSnapshotFlag
+        ? this.__reactInternalSnapshot
+        : maybeSnapshot;
+
+      componentDidUpdate.call(this, prevProps, prevState, snapshot);
+    };
+  }
+
+  return Component;
+}
+
+
+
+
+/***/ }),
+
+/***/ "./node_modules/react-overlays/esm/Dropdown.js":
+/*!*****************************************************!*\
+  !*** ./node_modules/react-overlays/esm/Dropdown.js ***!
+  \*****************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var dom_helpers_matches__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! dom-helpers/matches */ "./node_modules/react-overlays/node_modules/dom-helpers/esm/matches.js");
+/* harmony import */ var dom_helpers_querySelectorAll__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! dom-helpers/querySelectorAll */ "./node_modules/react-overlays/node_modules/dom-helpers/esm/querySelectorAll.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var prop_types__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! prop-types */ "./node_modules/prop-types/index.js");
+/* harmony import */ var prop_types__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(prop_types__WEBPACK_IMPORTED_MODULE_3__);
+/* harmony import */ var uncontrollable__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! uncontrollable */ "./node_modules/uncontrollable/esm/index.js");
+/* harmony import */ var _restart_hooks_usePrevious__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @restart/hooks/usePrevious */ "./node_modules/@restart/hooks/esm/usePrevious.js");
+/* harmony import */ var _restart_hooks_useCallbackRef__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! @restart/hooks/useCallbackRef */ "./node_modules/@restart/hooks/esm/useCallbackRef.js");
+/* harmony import */ var _restart_hooks_useForceUpdate__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! @restart/hooks/useForceUpdate */ "./node_modules/@restart/hooks/esm/useForceUpdate.js");
+/* harmony import */ var _restart_hooks_useEventCallback__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! @restart/hooks/useEventCallback */ "./node_modules/@restart/hooks/esm/useEventCallback.js");
+/* harmony import */ var _DropdownContext__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ./DropdownContext */ "./node_modules/react-overlays/esm/DropdownContext.js");
+/* harmony import */ var _DropdownMenu__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! ./DropdownMenu */ "./node_modules/react-overlays/esm/DropdownMenu.js");
+/* harmony import */ var _DropdownToggle__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! ./DropdownToggle */ "./node_modules/react-overlays/esm/DropdownToggle.js");
+
+
+
+
+
+
+
+
+
+
+
+
+var propTypes = {
+  /**
+   * A render prop that returns the root dropdown element. The `props`
+   * argument should spread through to an element containing _both_ the
+   * menu and toggle in order to handle keyboard events for focus management.
+   *
+   * @type {Function ({
+   *   props: {
+   *     onKeyDown: (SyntheticEvent) => void,
+   *   },
+   * }) => React.Element}
+   */
+  children: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.func.isRequired,
+
+  /**
+   * Determines the direction and location of the Menu in relation to it's Toggle.
+   */
+  drop: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.oneOf(['up', 'left', 'right', 'down']),
+
+  /**
+   * Controls the focus behavior for when the Dropdown is opened. Set to
+   * `true` to always focus the first menu item, `keyboard` to focus only when
+   * navigating via the keyboard, or `false` to disable completely
+   *
+   * The Default behavior is `false` **unless** the Menu has a `role="menu"`
+   * where it will default to `keyboard` to match the recommended [ARIA Authoring practices](https://www.w3.org/TR/wai-aria-practices-1.1/#menubutton).
+   */
+  focusFirstItemOnShow: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.oneOf([false, true, 'keyboard']),
+
+  /**
+   * A css slector string that will return __focusable__ menu items.
+   * Selectors should be relative to the menu component:
+   * e.g. ` > li:not('.disabled')`
+   */
+  itemSelector: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.string,
+
+  /**
+   * Align the menu to the 'end' side of the placement side of the Dropdown toggle. The default placement is `top-start` or `bottom-start`.
+   */
+  alignEnd: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.bool,
+
+  /**
+   * Whether or not the Dropdown is visible.
+   *
+   * @controllable onToggle
+   */
+  show: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.bool,
+
+  /**
+   * Sets the initial show position of the Dropdown.
+   */
+  defaultShow: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.bool,
+
+  /**
+   * A callback fired when the Dropdown wishes to change visibility. Called with the requested
+   * `show` value, the DOM event, and the source that fired it: `'click'`,`'keydown'`,`'rootClose'`, or `'select'`.
+   *
+   * ```ts static
+   * function(
+   *   isOpen: boolean,
+   *   event: SyntheticEvent,
+   * ): void
+   * ```
+   *
+   * @controllable show
+   */
+  onToggle: prop_types__WEBPACK_IMPORTED_MODULE_3___default.a.func
+};
+
+/**
+ * @displayName Dropdown
+ */
+function Dropdown(_ref) {
+  var drop = _ref.drop,
+      alignEnd = _ref.alignEnd,
+      defaultShow = _ref.defaultShow,
+      rawShow = _ref.show,
+      rawOnToggle = _ref.onToggle,
+      _ref$itemSelector = _ref.itemSelector,
+      itemSelector = _ref$itemSelector === void 0 ? '* > *' : _ref$itemSelector,
+      focusFirstItemOnShow = _ref.focusFirstItemOnShow,
+      children = _ref.children;
+  var forceUpdate = Object(_restart_hooks_useForceUpdate__WEBPACK_IMPORTED_MODULE_7__["default"])();
+
+  var _useUncontrolledProp = Object(uncontrollable__WEBPACK_IMPORTED_MODULE_4__["useUncontrolledProp"])(rawShow, defaultShow, rawOnToggle),
+      show = _useUncontrolledProp[0],
+      onToggle = _useUncontrolledProp[1];
+
+  var _useCallbackRef = Object(_restart_hooks_useCallbackRef__WEBPACK_IMPORTED_MODULE_6__["default"])(),
+      toggleElement = _useCallbackRef[0],
+      setToggle = _useCallbackRef[1]; // We use normal refs instead of useCallbackRef in order to populate the
+  // the value as quickly as possible, otherwise the effect to focus the element
+  // may run before the state value is set
+
+
+  var menuRef = Object(react__WEBPACK_IMPORTED_MODULE_2__["useRef"])(null);
+  var menuElement = menuRef.current;
+  var setMenu = Object(react__WEBPACK_IMPORTED_MODULE_2__["useCallback"])(function (ref) {
+    menuRef.current = ref; // ensure that a menu set triggers an update for consumers
+
+    forceUpdate();
+  }, [forceUpdate]);
+  var lastShow = Object(_restart_hooks_usePrevious__WEBPACK_IMPORTED_MODULE_5__["default"])(show);
+  var lastSourceEvent = Object(react__WEBPACK_IMPORTED_MODULE_2__["useRef"])(null);
+  var focusInDropdown = Object(react__WEBPACK_IMPORTED_MODULE_2__["useRef"])(false);
+  var toggle = Object(react__WEBPACK_IMPORTED_MODULE_2__["useCallback"])(function (event) {
+    onToggle(!show, event);
+  }, [onToggle, show]);
+  var context = Object(react__WEBPACK_IMPORTED_MODULE_2__["useMemo"])(function () {
+    return {
+      toggle: toggle,
+      drop: drop,
+      show: show,
+      alignEnd: alignEnd,
+      menuElement: menuElement,
+      toggleElement: toggleElement,
+      setMenu: setMenu,
+      setToggle: setToggle
+    };
+  }, [toggle, drop, show, alignEnd, menuElement, toggleElement, setMenu, setToggle]);
+
+  if (menuElement && lastShow && !show) {
+    focusInDropdown.current = menuElement.contains(document.activeElement);
+  }
+
+  var focusToggle = Object(_restart_hooks_useEventCallback__WEBPACK_IMPORTED_MODULE_8__["default"])(function () {
+    if (toggleElement && toggleElement.focus) {
+   
