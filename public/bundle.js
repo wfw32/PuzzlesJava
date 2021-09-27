@@ -72816,4 +72816,254 @@ var Modal = /*#__PURE__*/Object(react__WEBPACK_IMPORTED_MODULE_7__["forwardRef"]
     if (keyboard && e.keyCode === 27 && modal.isTopModal()) {
       onEscapeKeyDown == null ? void 0 : onEscapeKeyDown(e);
 
-      if (!e.de
+      if (!e.defaultPrevented) {
+        onHide();
+      }
+    }
+  });
+  var removeFocusListenerRef = Object(react__WEBPACK_IMPORTED_MODULE_7__["useRef"])();
+  var removeKeydownListenerRef = Object(react__WEBPACK_IMPORTED_MODULE_7__["useRef"])();
+
+  var handleHidden = function handleHidden() {
+    setExited(true);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    onExited == null ? void 0 : onExited.apply(void 0, args);
+  };
+
+  var Transition = transition;
+
+  if (!container || !(show || Transition && !exited)) {
+    return null;
+  }
+
+  var dialogProps = Object(_babel_runtime_helpers_esm_extends__WEBPACK_IMPORTED_MODULE_0__["default"])({
+    role: role,
+    ref: modal.setDialogRef,
+    // apparently only works on the dialog role element
+    'aria-modal': role === 'dialog' ? true : undefined
+  }, rest, {
+    style: style,
+    className: className,
+    tabIndex: -1
+  });
+
+  var dialog = renderDialog ? renderDialog(dialogProps) : /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_7___default.a.createElement("div", dialogProps, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_7___default.a.cloneElement(children, {
+    role: 'document'
+  }));
+
+  if (Transition) {
+    dialog = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_7___default.a.createElement(Transition, {
+      appear: true,
+      unmountOnExit: true,
+      "in": !!show,
+      onExit: onExit,
+      onExiting: onExiting,
+      onExited: handleHidden,
+      onEnter: onEnter,
+      onEntering: onEntering,
+      onEntered: onEntered
+    }, dialog);
+  }
+
+  var backdropElement = null;
+
+  if (backdrop) {
+    var BackdropTransition = backdropTransition;
+    backdropElement = renderBackdrop({
+      ref: modal.setBackdropRef,
+      onClick: handleBackdropClick
+    });
+
+    if (BackdropTransition) {
+      backdropElement = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_7___default.a.createElement(BackdropTransition, {
+        appear: true,
+        "in": !!show
+      }, backdropElement);
+    }
+  }
+
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_7___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_7___default.a.Fragment, null, /*#__PURE__*/react_dom__WEBPACK_IMPORTED_MODULE_8___default.a.createPortal( /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_7___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_7___default.a.Fragment, null, backdropElement, dialog), container));
+});
+var propTypes = {
+  /**
+   * Set the visibility of the Modal
+   */
+  show: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool,
+
+  /**
+   * A DOM element, a `ref` to an element, or function that returns either. The Modal is appended to it's `container` element.
+   *
+   * For the sake of assistive technologies, the container should usually be the document body, so that the rest of the
+   * page content can be placed behind a virtual backdrop as well as a visual one.
+   */
+  container: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.any,
+
+  /**
+   * A callback fired when the Modal is opening.
+   */
+  onShow: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * A callback fired when either the backdrop is clicked, or the escape key is pressed.
+   *
+   * The `onHide` callback only signals intent from the Modal,
+   * you must actually set the `show` prop to `false` for the Modal to close.
+   */
+  onHide: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * Include a backdrop component.
+   */
+  backdrop: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.oneOfType([prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool, prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.oneOf(['static'])]),
+
+  /**
+   * A function that returns the dialog component. Useful for custom
+   * rendering. **Note:** the component should make sure to apply the provided ref.
+   *
+   * ```js static
+   * renderDialog={props => <MyDialog {...props} />}
+   * ```
+   */
+  renderDialog: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * A function that returns a backdrop component. Useful for custom
+   * backdrop rendering.
+   *
+   * ```js
+   *  renderBackdrop={props => <MyBackdrop {...props} />}
+   * ```
+   */
+  renderBackdrop: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * A callback fired when the escape key, if specified in `keyboard`, is pressed.
+   *
+   * If preventDefault() is called on the keyboard event, closing the modal will be cancelled.
+   */
+  onEscapeKeyDown: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * A callback fired when the backdrop, if specified, is clicked.
+   */
+  onBackdropClick: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * A css class or set of classes applied to the modal container when the modal is open,
+   * and removed when it is closed.
+   */
+  containerClassName: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.string,
+
+  /**
+   * Close the modal when escape key is pressed
+   */
+  keyboard: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool,
+
+  /**
+   * A `react-transition-group@2.0.0` `<Transition/>` component used
+   * to control animations for the dialog component.
+   */
+  transition: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.elementType,
+
+  /**
+   * A `react-transition-group@2.0.0` `<Transition/>` component used
+   * to control animations for the backdrop components.
+   */
+  backdropTransition: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.elementType,
+
+  /**
+   * When `true` The modal will automatically shift focus to itself when it opens, and
+   * replace it to the last focused element when it closes. This also
+   * works correctly with any Modal children that have the `autoFocus` prop.
+   *
+   * Generally this should never be set to `false` as it makes the Modal less
+   * accessible to assistive technologies, like screen readers.
+   */
+  autoFocus: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool,
+
+  /**
+   * When `true` The modal will prevent focus from leaving the Modal while open.
+   *
+   * Generally this should never be set to `false` as it makes the Modal less
+   * accessible to assistive technologies, like screen readers.
+   */
+  enforceFocus: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool,
+
+  /**
+   * When `true` The modal will restore focus to previously focused element once
+   * modal is hidden
+   */
+  restoreFocus: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool,
+
+  /**
+   * Options passed to focus function when `restoreFocus` is set to `true`
+   *
+   * @link  https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus#Parameters
+   */
+  restoreFocusOptions: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.shape({
+    preventScroll: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.bool
+  }),
+
+  /**
+   * Callback fired before the Modal transitions in
+   */
+  onEnter: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * Callback fired as the Modal begins to transition in
+   */
+  onEntering: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * Callback fired after the Modal finishes transitioning in
+   */
+  onEntered: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * Callback fired right before the Modal transitions out
+   */
+  onExit: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * Callback fired as the Modal begins to transition out
+   */
+  onExiting: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * Callback fired after the Modal finishes transitioning out
+   */
+  onExited: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.func,
+
+  /**
+   * A ModalManager instance used to track and manage the state of open
+   * Modals. Useful when customizing how modals interact within a container
+   */
+  manager: prop_types__WEBPACK_IMPORTED_MODULE_6___default.a.instanceOf(_ModalManager__WEBPACK_IMPORTED_MODULE_13__["default"])
+};
+Modal.displayName = 'Modal';
+Modal.propTypes = propTypes;
+/* harmony default export */ __webpack_exports__["default"] = (Object.assign(Modal, {
+  Manager: _ModalManager__WEBPACK_IMPORTED_MODULE_13__["default"]
+}));
+
+/***/ }),
+
+/***/ "./node_modules/react-overlays/esm/ModalManager.js":
+/*!*********************************************************!*\
+  !*** ./node_modules/react-overlays/esm/ModalManager.js ***!
+  \*********************************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var dom_helpers_addClass__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! dom-helpers/addClass */ "./node_modules/react-overlays/node_modules/dom-helpers/esm/addClass.js");
+/* harmony import */ var dom_helpers_removeClass__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! dom-helpers/removeClass */ "./node_modules/react-overlays/node_modules/dom-helpers/esm/removeClass.js");
+/* harmony import */ var dom_helpers_css__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! dom-helpers/css */ "./node_modules/react-overlays/node_modules/dom-helpers/esm/css.js");
+/* harmony import */ var dom_helpers_scrollbarSize__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! dom-helpers/scrollbarSize */ "./node_modules/react-overlays/node_modules/dom-helpers/esm/scrollbarSize.js");
+/* harmony import */ var _isOverflowing__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./isOverflowing */ "./node_modules/react-overlays/esm/isOverflowing.js");
+/* harmony import */ var _manageAriaHidden__WEBPAC
