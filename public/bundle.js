@@ -82026,4 +82026,10 @@ if (hasSymbols()) {
 /***/ (function(module, exports, __webpack_require__) {
 
 __webpack_require__(/*! @babel/polyfill */"./node_modules/@babel/polyfill/lib/index.js");
-module.exports = __webpack_require__(/*
+module.exports = __webpack_require__(/*! ./client/index.js */"./client/index.js");
+
+
+/***/ })
+
+/******/ });
+//# sourceMappingURL=bundle.js.map
